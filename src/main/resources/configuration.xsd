@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+	<xs:element name="databaseConnectorConfiguration">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="DBSchemaInformation" minOccurs="0"
+					maxOccurs="1"></xs:element>
+				<xs:element ref="DBConnectionInformation" minOccurs="0"
+					maxOccurs="1"></xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+
+	<!-- Schema -->
+	<xs:element name="DBSchemaInformation">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="activePostgresSchema" type="xs:string"
+					minOccurs="0" maxOccurs="1"></xs:element>
+				<xs:element name="activeTableSchema" type="xs:string"
+					minOccurs="0" maxOccurs="1"></xs:element>
+				<xs:element name="activeDataPostgresSchema" type="xs:string"
+					minOccurs="0" maxOccurs="1"></xs:element>
+				<xs:element name="dataTable" type="xs:string" minOccurs="0"
+					maxOccurs="1"></xs:element>
+				<xs:element ref="tableSchemas" minOccurs="0" maxOccurs="1"></xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+
+	<xs:element name="tableSchemas">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="tableSchema" minOccurs="0" maxOccurs="unbounded"></xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+
+	<xs:element name="tableSchema">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="field" minOccurs="0" maxOccurs="unbounded"></xs:element>
+			</xs:sequence>
+			<xs:attribute name="name" type="xs:string" use="required"></xs:attribute>
+			<xs:attribute name="forEach" type="xs:string" use="required"></xs:attribute>
+		</xs:complexType>
+	</xs:element>
+
+	<xs:element name="field">
+		<xs:complexType>
+			<xs:attribute name="name" type="xs:string" use="required"></xs:attribute>
+			<xs:attribute name="type" type="xs:string" use="required"></xs:attribute>
+			<xs:attribute name="xpath" type="xs:string"></xs:attribute>
+			<xs:attribute name="filename" type="xs:string"></xs:attribute>
+			<xs:attribute name="regex" type="xs:string"></xs:attribute>
+			<xs:attribute name="replaceWith" type="xs:string"></xs:attribute>
+			<xs:attribute name="primaryKey" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="retrieve" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="timestamp" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="returnXMLFragment" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="returnValuesAsArray" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="concatString" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="extractFromFileName" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="mixedContent" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="resolveEntities" type="xs:boolean"></xs:attribute>
+			<xs:attribute name="gzip" type="xs:boolean"></xs:attribute>
+		</xs:complexType>
+	</xs:element>
+
+
+
+	<!-- Connection -->
+	<xs:element name="DBConnectionInformation">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="activeDBConnection" type="xs:string"
+					minOccurs="0" maxOccurs="1"></xs:element>
+				<xs:element name="maxActiveDBConnections" type="xs:integer"
+					minOccurs="0" maxOccurs="1"></xs:element>
+				<xs:element ref="DBConnections" minOccurs="0" maxOccurs="1"></xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+
+	<xs:element name="DBConnections">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="DBConnection" minOccurs="0" maxOccurs="unbounded"></xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+
+	<xs:element name="DBConnection">
+		<xs:complexType>
+			<xs:attribute name="name" type="xs:string" use="required"></xs:attribute>
+			<xs:attribute name="url" type="xs:string" use="required"></xs:attribute>
+		</xs:complexType>
+	</xs:element>
+
+</xs:schema>

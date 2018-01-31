@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseConnectorConfiguration>
+	<DBSchemaInformation>
+		<activePostgresSchema>public</activePostgresSchema>
+		<activeTableSchema>defaultSchema</activeTableSchema>
+		<activeDataPostgresSchema>_data</activeDataPostgresSchema>
+		<dataTable>_data</dataTable>
+		<tableSchemas>
+			<tableSchema name="defaultSchema" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					retrieve="true"></field>
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
+					retrieve="true"></field>
+				<field name="systemid" type="text" xpath="???" primaryKey="true"
+					retrieve="true"></field>
+			</tableSchema>
+		</tableSchemas>
+	</DBSchemaInformation>
+	<DBConnectionInformation>
+		<activeDBConnection>userConn</activeDBConnection>
+		<maxActiveDBConnections>6</maxActiveDBConnections>
+		<DBConnections>
+			<DBConnection name="defaultConn"
+				url="jdbc:postgresql://old.mcdonald.has-a-farm.mow/barn"></DBConnection>
+			<DBConnection name="userConn" url="jdbc:postgresql://aserver.net/aDB"></DBConnection>
+		
+		</DBConnections>
+	</DBConnectionInformation>
+</databaseConnectorConfiguration>

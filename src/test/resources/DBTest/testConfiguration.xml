@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseConnectorConfiguration>
+	<DBSchemaInformation>
+		<activePostgresSchema>database_connector</activePostgresSchema>
+		<activeTableSchema>unittest</activeTableSchema>
+		<activeDataPostgresSchema>database_connector</activeDataPostgresSchema>
+		<dataTable>_data</dataTable>
+		<tableSchemas>
+			<tableSchema name="unittest" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					retrieve="true"></field>
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
+					primaryKey="false" retrieve="true"></field>
+			</tableSchema>
+			<tableSchema name="defaultSchema" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					retrieve="true"></field>
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
+					retrieve="true"></field>
+				<field name="systemid" type="text" xpath="???" primaryKey="true"
+					retrieve="true"></field>
+			</tableSchema>
+			<tableSchema name="otherSchema" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmcid" type="text" xpath="PMID" primaryKey="true"
+					retrieve="true"></field>
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
+					retrieve="true"></field>
+				<field name="pmid" type="text" xpath="???" primaryKey="true"
+					retrieve="true"></field>
+			</tableSchema>
+		</tableSchemas>
+	</DBSchemaInformation>
+	<DBConnectionInformation>
+		<activeDBConnection>unittest</activeDBConnection>
+		<maxActiveDBConnections>6</maxActiveDBConnections>
+		<DBConnections>		
+			<DBConnection name="unittest" url="jdbc:postgresql://localhost/unittests"/>
+		</DBConnections>
+	</DBConnectionInformation>
+</databaseConnectorConfiguration>

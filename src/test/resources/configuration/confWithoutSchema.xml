@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseConnectorConfiguration>
+	<DBConnectionInformation>
+		<activeDBConnection>userConn</activeDBConnection>
+		<maxActiveDBConnections>6</maxActiveDBConnections>
+		<activeDataPostgresSchema>_data</activeDataPostgresSchema>
+		<dataTable>_data</dataTable>
+		<DBConnections>
+			<DBConnection name="userConn" url="jdbc:postgresql://aserver.net/aDB"></DBConnection>
+		</DBConnections>
+	</DBConnectionInformation>
+</databaseConnectorConfiguration>

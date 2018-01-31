@@ -1,0 +1,1107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+"http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
+<article>
+	<articleinfo>
+		<title>julie-medline-manager</title>
+		<releaseinfo>Version 0.1</releaseinfo>
+		<author>
+			<firstname>Johannes</firstname>
+
+			<surname>Hellrich</surname>
+		</author>
+		<author>
+			<firstname>Erik</firstname>
+
+			<surname>Faessler</surname>
+		</author>
+	</articleinfo>
+
+	<section>
+		<title>Introduction</title>
+		<para>
+			The julie-medline-manager, hereafter referenced as DBC, after its
+			main component (the DataBaseConnector), makes it easy to integrate a
+			database in the
+			workflows at
+			JULIE Lab. It uses the tables of a
+			PostgreSQL database
+			to store documents out of large text collections
+			(usually PubMeds Medline)
+			and includes several
+			features to make
+			experiments
+			easier, like:
+			<itemizedlist>
+				<listitem>
+					<para>Several ways to define a subset for your experiments.</para>
+				</listitem>
+				<listitem>
+					<para>Marking files to indicate their processing status (only with
+						special UIMA medline reader).</para>
+				</listitem>
+				<listitem>
+					<para>Importing and updating of documents.</para>
+				</listitem>
+				<listitem>
+					<para>And, of course, multiple ways to retrieve your files.</para>
+				</listitem>
+			</itemizedlist>
+		</para>
+		<para>
+			All of these features may be used via the API (implicitly
+			defined by
+			the public methods, see the Java Docs), but most are also
+			accessible
+			through the
+			command
+			line interface (CLI).</para>
+		<para>
+			Enter
+			<code>java -jar JAR_NAME PARAMETER(S)</code>
+			in your terminal to use the CLI.
+			Possible parameters and their effects
+			will be described later. The
+			CLI saves your username and password for
+			the database and accepts
+			configuration files which describe the
+			structure of the database
+			table witch stores your documents.
+		</para>
+	</section>
+
+	<section>
+		<title>Quickstart</title>
+		<para>
+			This section describes a typical workflow to demonstrate the usage of
+			the DBCs CLI. For all commands you are supposed to enter
+			<code>java -jar JAR_NAME</code>
+			and add the specific parameters given in the examples. If you never
+			used the CLI before
+			you will need to enter your username and password
+			for the database in a dialog.
+		</para>
+		<para>
+			Assuming you want to create a primary data table to store an XML
+			document,
+			you first
+			should check if the
+			name is already used. Use
+			<code>-t</code>
+			to display
+			the existing tables (in your Postgres schema).
+		</para>
+		<para>
+			Now it's time to choose an unused name for your primary data table
+			and locate the
+			file import.xml in src/test/resources.
+			Use
+			<code>-i PATH_TO_FILE -z TABLE_NAME</code>
+			to create a table called TABLE_NAME and import the content of the
+			file into it.
+			Using
+			<code>-z</code>
+			to do this is uncommon, for production
+			you should use the
+			configuration files and distinct databases to
+			separate your primary
+			data!
+		</para>
+		<para>
+			To retrieve an entry from your newly created table you can use
+			<code>-q QUERY</code>
+			. You will get matches (some xml) for the queries
+			<code>007</code>
+			and
+			<code>666</code>
+			.
+		</para>
+		<para>
+			Let's create a new subset (sample of another table, can be processed
+			by a medline reader) of your old table. Find an
+			unused name and enter
+			<code>-s NEW_NAME -z OLD_TABLE -r 1</code>
+			to create a subset and choose one random entry of your old table as
+			its content. Querying a subset is impossible, as the point of a query
+			is to
+			retrieve primary data, which is not saved in the subset, but
+			only
+			in your primary data table. If you want to check its content you
+			must use pgAdmin (or a similar tool).
+			Instead you can use the CLI to
+			check a subsets status with
+			<code>-st YOUR_SUBSET</code>
+			. This status would
+			be changed during processing with a reader and
+			should display:
+			<literallayout>is_in_process=0, is_processed=0, total=1
+  0 %  is_in_process
+  0 %  is_processed</literallayout>
+		</para>
+		<para>These are some of the main functions of the CLI. The rest of
+			this guide will describe
+			everything with more details and explain you
+			how to create the configuration
+			files mentioned above.
+		</para>
+	</section>
+	<section>
+		<title>Tables in the database</title>
+		<para>
+			This section explains the different kinds of tables used by the
+			DBC. PostgreSQL tables can have a schema as a prefix, separated by a
+			dot: SCHEMA.TABLE
+		</para>
+		<section>
+			<title>primary data table</title>
+			<para>
+				A primary data table (default _data._data) contains the primary data
+				(XML)
+				used for all experiments.
+				All kinds of subsets reference a
+				primary data table. You can query a primary data table, but it is
+				not possible to
+				use
+				it with readers. If you want to process all
+				documents in your primary data table,
+				you have to create a
+				(mirror-)subset with
+				the
+				<code>-a</code>
+				parameter (selecting all records)
+				first.
+			</para>
+		</section>
+		<section>
+			<title>subset</title>
+			<para>
+				A subset references a primary data table (it uses the primary data
+				tables primary keys as its foreign keys). It contains no XMLs, those
+				are fetched from the
+				primary data table.
+				Subsets are used to
+				synchronize multiple readers,
+				through writing
+				the
+				processing status in
+				the fields
+				<code>in_process</code>
+				and
+				<code>processed</code>
+				.
+				You can
+				query or reset these entries via the CLI.
+			</para>
+		</section>
+		<section>
+			<title>superset</title>
+			<para>
+				You can use a subset as superset to define another subset with
+				<code>-z</code>
+				. The new subset will reference the primary data table of its
+				superset,
+				but contains only records which can be found in its
+				superset. This is commonly
+				used to create
+				random samples
+				of
+				experimental data (defined by a
+				subset1) which
+				serves as the superset
+				for the random
+				subset2:
+				<code>-s subset2 -z subset1 -r sampleSize</code>
+			</para>
+		</section>
+		<section>
+			<title>mirror subset and _mirrorSubsets</title>
+			<para>Mirror subsets are subsets which are automatically updated if
+				the primary data table changes. Deletion is propagated by the
+				foreign keys (i.e. you can delete directly via pgAdmin),
+				while
+				insertions are handled by the import/update methods of the DBC
+				(i.e.
+				direct edits via pgAdmin cause errors!)
+				A special table,
+				_mirrorSubsets, is used to
+				enable
+				this
+				synchronization.
+				You will get no
+				notice if these updates
+				happen
+				and
+				experiments
+				performed with
+				mirror
+				subsets are in no way
+				guaranteed
+				to be
+				reproducible, due to their
+				dynamic nature.
+			</para>
+		</section>
+	</section>
+	<section>
+		<title>Configuration files</title>
+		<para>
+			Configuration files are XML files which provide the DBC your
+			settings for
+			the database connection and the structure of the tables.
+			There is a default
+			configuration file inside the
+			executable jar, but,
+			you will probably want to
+			provide a custom configuration file (put it
+			in the directory
+			containing the julie-medline-managers jar).
+			The DBC
+			will be usable without it, also the
+			settings in the deaulft
+			configuration are
+			intended for testing only.
+			A
+			XSD-Scheme
+			(configuration.xsd in src/main/resources) exists to help with the
+			creation of
+			custom user configurations.
+			There is no need to specify
+			everything in a
+			custom configuration file,
+			as its content is augmented
+			with the
+			default settings. This merging
+			will
+			cause errors, if your
+			configuration
+			uses a name for a tableSchema or
+			DBConnection
+			(the meaning
+			of those
+			elements is explained in the next sections)
+			which is
+			already
+			used in
+			the default configuration.
+			Each configuration file
+			has two main
+			areas,
+			explained
+			below.
+		</para>
+
+		<section>
+			<title>DBSchemaInformation</title>
+			<para>
+				In this area you choose the values of activePostgresSchema,
+				activeTableSchema
+				and dataTable.</para>
+			<section>
+				<title>Choices</title>
+				<para>
+					The value of
+					<emphasis>activePostgresSchema</emphasis>
+					is used as PostreSQL-schema
+					(see
+					http://www.postgresql.org/docs/8.4/interactive/ddl-schemas.html for
+					an explanation)
+					for all
+					queries
+					which don't explicitly choose another.
+				</para>
+				<para>
+					The value of
+					<emphasis>activeTableSchema</emphasis>
+					allows you to choose a tableSchema; those describe the
+					structure of
+					your tables and how those are populated.
+				</para>
+				<para>
+					The value of
+					<emphasis>dataTable</emphasis>
+					is used as the name of your primary data table. This name can
+					include
+					a PostreSQL-schema as a prefix, e.g.
+					<code>schema.name</code>
+					. You probably don't want to change the default value
+					(_data._data), as using different databases
+					for different projects
+					allows for a more intuitive separation. Having multiple primary
+					data tables in one database causes
+					visual ambiguity about the
+					primary data a subset belongs to.
+					This is no technical problem, as
+					foreign
+					keys allow for
+					disambiguation, but it would be confusing to
+					the
+					user.
+				</para>
+			</section>
+			<section>
+				<title>tableSchema</title>
+				<para>
+					A tableSchema
+					describes the structure of a database table, and how
+					the raw
+					XML-files are
+					parsed to populate it.
+					Every tableSchema needs
+					an
+					xpath as its
+					<code>&lt;forEach&gt;</code>
+					attribute. All other xpaths used for parsing use this as
+					their
+					starting point. (This is necessary to parse files with multiple
+					articles.)
+				</para>
+				<para>
+					A tableSchema element has multiple
+					<code>field</code>
+					elements
+					as its children.
+					Those are represented in the database as
+					columns and
+					the XML is
+					parsed according to the rules encoded in its
+					attributes.
+					These
+					include a name and type for the parsed information
+					and
+					several
+					other
+					choices, like the relative xpath or the choice for a
+					primaryKey.
+					Fields without an xpath are possible. Those define
+					columns
+					to save
+					e.g. a timestamp, automatically generated by the
+					attributes
+					<code>type=&quot;timestamp without time zone&quot;
+						timestamp=&quot;true&quot;</code>
+					. An overview is provided below.
+				</para>
+			</section>
+		</section>
+		<section>
+			<title>DBConnectionInformation</title>
+			<para>
+				This part stores the URLs of databases and the names by which
+				they are referenced if an activePostgresSchema is chosen. You can
+				also set
+				activeDBConnection and maxActiveDBConnections, but you're
+				probably fine with the
+				values in the defaultConfig.
+			</para>
+		</section>
+		<section>
+			<title>Configuration and database
+		</title>
+			<para>
+				If a table is defined in the configuration, but does not yet exists
+				in the database, it will be created if you import documents into it.
+				Later changes to the definition are not propagated
+				to the database
+				and will lead to errors. The parameter
+				<code>-ch TableName</code>
+				allows users to check if a table confirms to its definition.
+			</para>
+		</section>
+
+		<section>
+			<title>Example
+			</title>
+			<para>
+				<literallayout>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+			&lt;databaseConnectorConfiguration xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; 
+                                xsi:noNamespaceSchemaLocation=&quot;configuration.xsd&quot;&gt; 
+			    &lt;DBSchemaInformation&gt;
+			        &lt;activePostgresSchema&gt;test&lt;/activePostgresSchema&gt;
+			        &lt;activeTableSchema&gt;default&lt;/activeTableSchema&gt;
+			        &lt;dataTable&gt;_data._data&lt;/dataTable&gt;
+			        &lt;tableSchemas&gt;
+			            &lt;tableSchema name=&quot;default&quot; forEach=&quot;/MedlineCitationSet/MedlineCitation&quot;&gt;
+			                &lt;field name=&quot;pmid&quot; type=&quot;text&quot; xpath=&quot;PMID&quot; primaryKey=&quot;true&quot; retrieve=&quot;true&quot;&gt;&lt;/field&gt;
+			                &lt;field name=&quot;xml&quot; type=&quot;text&quot; xpath=&quot;.&quot; returnXMLFragment=&quot;true&quot; retrieve=&quot;true&quot;&gt;&lt;/field&gt;
+			            &lt;/tableSchema&gt;
+			        &lt;/tableSchemas&gt;
+			    &lt;/DBSchemaInformation&gt;
+			    &lt;DBConnectionInformation&gt;
+			        &lt;activeDBConnection&gt;test&lt;/activeDBConnection&gt;
+			        &lt;maxActiveDBConnections&gt;6&lt;/maxActiveDBConnections&gt;
+			        &lt;DBConnections&gt;
+			            &lt;DBConnection name=&quot;test&quot; url=&quot;jdbc:postgresql://stemnet1.coling.uni-jena.de/dbc-test&quot;&gt;&lt;/DBConnection&gt;
+			        &lt;/DBConnections&gt;
+			    &lt;/DBConnectionInformation&gt;
+			&lt;/databaseConnectorConfiguration&gt;</literallayout>
+			</para>
+		</section>
+
+		<section>
+			<title>Possible attributes of field</title>
+			<para>
+				<table>
+					<title>Options for fields</title>
+					<tgroup cols='2' align='center' colsep='1' rowsep='1'>
+						<colspec colname='c1' />
+						<colspec colname='c2' />
+						<thead>
+							<row>
+								<entry>option</entry>
+								<entry>effect</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry>name</entry>
+								<entry>
+									Sets the name of the
+									database-field which holds the
+									retrieved information.
+								</entry>
+							</row>
+							<row>
+								<entry>type</entry>
+								<entry>
+									SQL type used for the value, e.g.
+									varchar or int.
+								</entry>
+							</row>
+							<row>
+								<entry>xpath</entry>
+								<entry>
+									An XPath expression determining which
+									XML
+									elements of a
+									document contain the
+									desired information.
+								</entry>
+							</row>
+							<row>
+								<entry>primaryKey</entry>
+								<entry>
+									If set to true, the database table column will be part of
+									the primary key.
+								</entry>
+							</row>
+							<row>
+								<entry>retrieve</entry>
+								<entry>
+									If set to true, the value of the database table column
+									will be retrieved by the DataBaseConnectors query
+									methods.
+								</entry>
+							</row>
+
+							<row>
+								<entry>returnXMLFragment</entry>
+								<entry>
+									If set to true the whole xml described by the xpath will
+									be
+									returned.
+								</entry>
+							</row>
+							<row>
+								<entry>mixedContent</entry>
+								<entry>If set to true, the element pointed to by this field's
+									XPath expression
+									is assumed be of mixed content, i.e. the
+									element can contain
+									character
+									data as well as nested elements.
+									The character data will be
+									returned, XML
+									markup will be
+									discarded.</entry>
+							</row>
+							<row>
+								<entry>resolveEntities</entry>
+								<entry> If set to true, extracted XML text passages will be XML
+									entity resolved. That is, special characters will be
+									substituted by their human readable counterpart.</entry>
+							</row>
+							<row>
+								<entry>timestamp</entry>
+								<entry>
+									Fields which have set the
+									<code>TIMESTAMP</code>
+									attribute to "true" will be given the time stamp
+									of the last
+									update for the corresponding record. This is
+									required
+									for
+									delta-updates.
+								</entry>
+							</row>
+							<row>
+								<entry>extractFromFileName</entry>
+								<entry>
+									If set to true, the file name - if the XML document is read
+									from file -
+									is used to extract values. This is done by matching
+									and replacing with a
+									regular
+									expression. Therefore
+									using this
+									attribute
+									requires you to deliver
+									values for the
+									attributes
+									<code>regex</code>
+									and
+									<code>replaceWith</code>
+									as well.
+								</entry>
+							</row>
+							<row>
+								<entry>regex</entry>
+								<entry>
+									Used together with
+									<code>EXTRACT_FROM_FILENAME</code>
+									and
+
+									<code>REPLACE_WITH</code>
+									attributes. Determines the regular expression
+									whose matches on
+									the XML document file name are substituted by
+									the
+									value
+									given by
+									<code>REPLACE_WITH</code>
+									.
+								</entry>
+							</row>
+							<row>
+								<entry>replaceWith</entry>
+								<entry>
+									Used together with
+									<code>EXTRACT_FROM_FILENAME</code>
+									and
+									<code>REGEX</code>
+									attributes. Determines the substitute expression to
+									replace
+									characters of the XML document filename which match
+									the regular
+									expression given by the
+									<code>REGEX</code>
+									attribute.
+								</entry>
+							</row>
+
+
+
+						</tbody>
+					</tgroup>
+				</table>
+			</para>
+		</section>
+
+	</section>
+	<section>
+		<title>CLI Parameters</title>
+		<section>
+			<title>Modes</title>
+			<para>
+				You must supply exactly one of the following parameters everytime
+				you
+				call the CLI to determine its mode (what it is supposed to do).
+				<table>
+					<title>Modes</title>
+					<tgroup cols='4' align='center' colsep='1' rowsep='1'>
+						<colspec colname='c1' />
+						<colspec colname='c2' />
+						<colspec colname='c3' />
+						<colspec colname='c4' />
+						<thead>
+							<row>
+								<entry>short</entry>
+								<entry>long</entry>
+								<entry>argument</entry>
+								<entry>description</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry>i</entry>
+								<entry>import</entry>
+								<entry>file/dir to import</entry>
+								<entry>Import data into the _data table</entry>
+							</row>
+							<row>
+								<entry>s</entry>
+								<entry>subset</entry>
+								<entry>name of the new subset table</entry>
+								<entry>Define a subset table; use -f, -o, -a, -w or -r to
+									specify
+									the subsets source.</entry>
+							</row>
+							<row>
+								<entry>re</entry>
+								<entry>reset</entry>
+								<entry>subset table name</entry>
+								<entry>Resets a subset table to a not-yet-processed state.
+								</entry>
+							</row>
+							<row>
+								<entry>st</entry>
+								<entry>status</entry>
+								<entry>subset table name</entry>
+								<entry>Show the processing status of a subset table.</entry>
+							</row>
+							<row>
+								<entry>q</entry>
+								<entry>query</entry>
+								<entry>your query</entry>
+								<entry>Query a table (default: _data._data) for XMLs.
+									You can
+									enter the primary keys directly or use -f to specify a
+									file.
+									Use
+									-d to display delimiters between the results.
+									Use -z to search a
+									custom primary data table</entry>
+							</row>
+							<row>
+								<entry>td</entry>
+								<entry>tabledefinition</entry>
+								<entry>the table</entry>
+								<entry>Displays the columns of a table.</entry>
+							</row>
+							<row>
+								<entry>ch</entry>
+								<entry>check</entry>
+								<entry>table</entry>
+								<entry>Checks if a table confirms to its definition (for
+									subsets:
+									only primary keys!)</entry>
+							</row>
+							<row>
+								<entry>dc</entry>
+								<entry>defaultconfig</entry>
+								<entry>-</entry>
+								<entry>Prints the defaultConfiguration.</entry>
+							</row>
+							<row>
+								<entry>sch</entry>
+								<entry>scheme</entry>
+								<entry>-
+							</entry>
+								<entry>Displays the active scheme.</entry>
+							</row>
+							<row>
+								<entry>h</entry>
+								<entry>help</entry>
+								<entry>-
+							</entry>
+								<entry>Displays all possible parameters.</entry>
+							</row>
+							<row>
+								<entry>t</entry>
+								<entry>tables</entry>
+								<entry>-
+							</entry>
+								<entry>Displays all tables in the active scheme.</entry>
+							</row>
+
+						</tbody>
+					</tgroup>
+				</table>
+			</para>
+		</section>
+		<section>
+			<title>Mutually exclusive parameters</title>
+			<para>
+				Some of the modes need another
+				parameter, e.g. to determine how
+				a
+				query is to be done. You can not
+				combine multiple parameters out of
+				this list!
+				<table>
+					<title>Mutually exclusive parameters</title>
+					<tgroup cols='4' align='center' colsep='1' rowsep='1'>
+						<colspec colname='c1' />
+						<colspec colname='c2' />
+						<colspec colname='c3' />
+						<colspec colname='c4' />
+						<thead>
+							<row>
+								<entry>short</entry>
+								<entry>long</entry>
+								<entry>argument</entry>
+								<entry>description</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry>f</entry>
+								<entry>file</entry>
+								<entry>a file</entry>
+								<entry>Set the file used for query</entry>
+							</row>
+							<row>
+								<entry>o</entry>
+								<entry>online</entry>
+								<entry>query</entry>
+								<entry>Defines the subset by a PubMed query
+									- remember to wrap it
+									in double quotation marks!</entry>
+							</row>
+							<row>
+								<entry>r</entry>
+								<entry>random</entry>
+								<entry>sample size</entry>
+								<entry>Generate a random subset, you must provide its size as a
+									parameter. Often used with -z.</entry>
+							</row>
+							<row>
+								<entry>w</entry>
+								<entry>where</entry>
+								<entry>condition</entry>
+								<entry>Uses a SQL WHERE clause during subset definition.</entry>
+							</row>
+							<row>
+								<entry>j</entry>
+								<entry>journals</entry>
+								<entry>file</entry>
+								<entry>Define a subset by providing a file with journal names.
+								</entry>
+							</row>
+							<row>
+								<entry>m</entry>
+								<entry>mirror</entry>
+								<entry>-
+							</entry>
+								<entry>Creates a subset table which mirrors the database table.
+									I.e. when the data table gets new records,
+									the mirror subset(s)
+									will be updated accordingly.</entry>
+							</row>
+							<row>
+								<entry>a</entry>
+								<entry>all</entry>
+								<entry>-
+							</entry>
+								<entry>Use all entries of the _data table for the subset.
+								</entry>
+							</row>
+						</tbody>
+					</tgroup>
+				</table>
+			</para>
+		</section>
+		<section>
+			<title>Optional parameters</title>
+			<para>
+				The following parameters can be combined with most others, see those
+				for details.
+				<table>
+					<title>optional parameters</title>
+					<tgroup cols='4' align='center' colsep='1' rowsep='1'>
+						<colspec colname='c1' />
+						<colspec colname='c2' />
+						<colspec colname='c3' />
+						<colspec colname='c4' />
+						<thead>
+							<row>
+								<entry>short</entry>
+								<entry>long</entry>
+								<entry>argument</entry>
+								<entry>description</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry>z</entry>
+								<entry>superset</entry>
+								<entry>name of the superset table</entry>
+								<entry>Provides a superset name for definition of a subset or
+									the
+									name of a data table</entry>
+							</row>
+							<row>
+								<entry>x</entry>
+								<entry>xpath</entry>
+								<entry>Display the part of your query result matched by an xpath
+								</entry>
+								<entry>xpath (e.g. //author to find all elements called author)
+								</entry>
+							</row>
+							<row>
+								<entry>v</entry>
+								<entry>verbose</entry>
+								<entry>-
+							</entry>
+								<entry>Activate verbose informational ouput of the tool's
+									actions
+							</entry>
+							</row>
+							<row>
+								<entry>d</entry>
+								<entry>delimiter</entry>
+								<entry>- 
+							</entry>
+								<entry>Display a line of "-" as delimiter between the results.
+								</entry>
+							</row>
+						</tbody>
+					</tgroup>
+				</table>
+			</para>
+		</section>
+		<section>
+			<title>Authentication parameters</title>
+			<para>
+				If you want to override your default authentication details you can
+				use the following parameters.
+				<table>
+					<title>authentication parameters</title>
+					<tgroup cols='4' align='center' colsep='1' rowsep='1'>
+						<colspec colname='c1' />
+						<colspec colname='c2' />
+						<colspec colname='c3' />
+						<colspec colname='c4' />
+						<thead>
+							<row>
+								<entry>short</entry>
+								<entry>long</entry>
+								<entry>argument</entry>
+								<entry>description</entry>
+							</row>
+						</thead>
+						<tbody>
+							<row>
+								<entry>u</entry>
+								<entry>url</entry>
+								<entry>url</entry>
+								<entry>URL to database server (e.g.
+									jdbc:postgresql://host/database)</entry>
+							</row>
+							<row>
+								<entry>n</entry>
+								<entry>username</entry>
+								<entry>username</entry>
+								<entry>username for database</entry>
+							</row>
+							<row>
+								<entry>p</entry>
+								<entry>pass</entry>
+								<entry>password</entry>
+								<entry>password for database</entry>
+							</row>
+						</tbody>
+					</tgroup>
+				</table>
+			</para>
+		</section>
+		<section>
+			<title>Example</title>
+			<para>
+				To define a new subset, you need the subset mode and an
+				exclusive
+				parameter. To create a subset containing all entries in the primary
+				data
+				table which are
+				matched by a particular Pubmed query you
+				can use
+				<code>-s SUBSET_NAME -o "your query"</code>
+				.
+			</para>
+			<para>
+				If you want a custom superset (e.g. another subset you defined by
+				matching
+				your primary data table with a list of journals)
+				you add an
+				optional parameter
+				<code>-s SUBSET_NAME - o "your query" -z ANOTHER_TABLE</code>
+				.
+			</para>
+			<para>
+				You can still add one other optional parameter,
+				<code>-v</code>
+				to get
+				verbose
+				output (useful for debugging).
+			</para>
+		</section>
+	</section>
+
+
+	<section>
+		<title>Internal
+	</title>
+		<para>This section describes some of the used technologies / design
+			decissions. It is not intended to
+			explain every detail of the
+			internals, please refere to the (commented)
+			sourcecode
+			and the java
+			docs
+			for more details.
+	</para>
+		<section>
+			<title>CLI vs DBC
+	</title>
+			<para>
+				The CLI does not expose all abilities of the DBC and does little
+				more than call it.
+				Nevertheless, the CLI provides some consistency
+				checks to
+				<itemizedlist>
+					<listitem>
+						<para>provide useful error messages instead of SQL errors
+							produced
+							by the DBC itself.</para>
+					</listitem>
+					<listitem>
+						<para>
+							choose the right method automatically. For example the
+							<code>-i</code>
+							parameter
+							can cause a call of
+							<code>dbc.importFromXMLFile</code>
+							or
+							<code>dbc.updateFromXML</code>
+							depending
+							on the emptiness of the target table.
+						</para>
+					</listitem>
+				</itemizedlist>
+			</para>
+		</section>
+		<section>
+			<title>Multithreading
+	</title>
+			<para>Querying a database uses 3 threads to fetch the results and
+				transform them. The result of each query
+				is exposed as an iterator,
+				holding a limited amount of matched entries
+				(determined by the batch
+				size).
+				Multithreading enables the retrieval of the next results from
+				the database and
+				their transformation into
+				a List, while the first
+				results are exposed by the iterator. The
+				downsides of this design are
+				explained
+				in the caveats section.
+	</para>
+		</section>
+	</section>
+
+	<section>
+		<title>Caveats
+	</title>
+		<para>There are some possible causes for errors useres should avoid
+			and some parts
+			of the DBC which may need work from future developers.
+		</para>
+		<section>
+			<title>Multithreading
+	</title>
+			<para>If you query a database multiple threads are used to fetch the
+				results and transform them.
+				This can lead to high CPU and RAM load,
+				especially if you use the API to
+				create iterators but don't
+				use them.
+				The backgroudn threads stay active and query the database, even if
+				you
+				don't keep a reference to the iterator.
+	</para>
+		</section>
+		<section>
+			<title>.dbcUser
+	</title>
+			<para>
+				A hidden file in each users home directory, .dbcUser, is
+				created on
+				first use of the CLI. It stores username and password for
+				each database connection.
+				This Information is not saved in the normal Configuration
+				files, as
+				these are supposed
+				to be interchangable between users, while
+				the database logins
+				are not.
+				If the
+				username/password changes
+				the
+				file has to be
+				deleted or updated by the user.
+				All entries are saved as:
+				<literallayout>
+				DBConnectionName
+				username
+				password
+				empty line
+				</literallayout>
+
+
+			</para>
+		</section>
+		<section>
+			<title>Online queries for subset definition
+	</title>
+			<para>
+				The abillity to query Pubmed via its online API is convenient
+				for
+				subset creation but may need increased heap space
+				for unspecific
+				queries due to the large size of your result.
+				As Pubmeds API forces
+				an upper
+				limit for the size of your results,
+				a limit well above the
+				current
+				(2011)
+				size of Pubmed was choosen. Depending on the growth of
+				Pubmed
+				and the
+				kind of queries a
+				change of this constant may
+				become
+				necessary.
+				Finally the API allows for an email adress as an optional
+				parameter,
+				which should be
+				used if heavy usage
+				is intended, otherwise
+				one may get
+				blocked. This is not yet supported,
+				but may become
+				necessary depending
+				on further usage.
+	</para>
+		</section>
+		<section>
+			<title>Size of the batches used for queries
+	</title>
+			<para>
+				This size was empirically tested and seems to be a good
+				compromise
+				between speed and memory usage.
+				Changes to the hardware may
+				make bigger batches reasonable.
+	</para>
+		</section>
+		<section>
+			<title>Connection Pooling
+	</title>
+			<para>
+				The DBC utilizes connection pooling with a JVM specific
+				poolsize,
+				determined by the configuration. The size is limited by the
+				database server
+				and
+				creates an upper bound (July 2011: about 10) for
+				the number of
+				JVMs which
+				can interact with the database. Please keep
+				this in mind for your UIMA
+				pipelines.
+	</para>
+		</section>
+	</section>
+</article>

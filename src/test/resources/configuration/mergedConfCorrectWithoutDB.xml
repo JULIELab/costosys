@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseConnectorConfiguration>
+	<DBSchemaInformation>
+		<activePostgresSchema>anotherPGSchema</activePostgresSchema>
+		<activeTableSchema>userTableSchema1</activeTableSchema>
+		<activeDataPostgresSchema>anotherschema</activeDataPostgresSchema>
+		<dataTable>_data</dataTable>
+		<tableSchemas>
+			<tableSchema name="defaultSchema" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					retrieve="true"></field>
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
+					retrieve="true"></field>
+				<field name="systemid" type="text" xpath="???" primaryKey="true"
+					retrieve="true"></field>
+			</tableSchema>
+			<tableSchema name="userTableSchema1" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="field1Schema1" type="text" xpath="path/to/value1"
+					primaryKey="true" retrieve="true"></field>
+				<field name="field2Schema2" type="text" xpath="path/to/value2"
+					returnXMLFragment="true" retrieve="true"></field>
+			</tableSchema>
+			<tableSchema name="userTableSchema2" forEach="/muh/maeh">
+				<field name="field1Schema2" type="text" xpath="PMID"
+					primaryKey="true" retrieve="true"></field>
+				<field name="field2Schema2" type="text" xpath="."
+					returnXMLFragment="true" primaryKey="true" retrieve="true"></field>
+			</tableSchema>
+		
+		</tableSchemas>
+	</DBSchemaInformation>
+	<DBConnectionInformation>
+		<activeDBConnection>defaultConn</activeDBConnection>
+		<maxActiveDBConnections>10</maxActiveDBConnections>
+		<DBConnections>
+			<DBConnection name="defaultConn"
+				url="jdbc:postgresql://old.mcdonald.has-a-farm.mow/barn"></DBConnection>
+		</DBConnections>
+	</DBConnectionInformation>
+</databaseConnectorConfiguration>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseConnectorConfiguration>
+	<DBSchemaInformation>
+		<activePostgresSchema>anotherPGSchema</activePostgresSchema>
+		<activeTableSchema>userTableSchema1</activeTableSchema>
+		<activeDataPostgresSchema>anotherSchema</activeDataPostgresSchema>
+		<dataTable>_data</dataTable>
+		<tableSchemas>
+			<tableSchema name="defaultSchema" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					retrieve="true"></field>
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
+					retrieve="true"></field>
+				<field name="systemid" type="text" xpath="???" primaryKey="true"
+					retrieve="true"></field>
+			</tableSchema>
+			<!-- This definition uses field elements which are closed immediately. 
+				A VTD attribute iterator which is not re-set before each field will fail 
+				to extract the attributes of the second field definition. -->
+			<tableSchema name="userTableSchema1" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="field1Schema1" type="text" xpath="path/to/value1"
+					primaryKey="true" retrieve="true" />
+				<field name="field2Schema1" type="text" xpath="path/to/value2"
+					returnXMLFragment="true" retrieve="true" />
+			</tableSchema>
+			<!-- Here, the field elements have an explicit closing tag. This makes 
+				a difference to the VTD parser when using an attribute iterator. -->
+			<tableSchema name="userTableSchema2" forEach="/muh/maeh">
+				<field name="field1Schema2" type="text" xpath="PMID"
+					primaryKey="true" retrieve="true"></field>
+				<field name="field2Schema2" type="text" xpath="."
+					returnXMLFragment="true" primaryKey="true" retrieve="true"></field>
+			</tableSchema>
+		
+		</tableSchemas>
+	</DBSchemaInformation>
+	<DBConnectionInformation>
+		<activeDBConnection>userConn</activeDBConnection>
+		<maxActiveDBConnections>6</maxActiveDBConnections>
+		<DBConnections>
+			<DBConnection name="defaultConn"
+				url="jdbc:postgresql://old.mcdonald.has-a-farm.mow/barn"></DBConnection>
+			<DBConnection name="userConn" url="jdbc:postgresql://aserver.net/aDB"></DBConnection>
+		
+		</DBConnections>
+	</DBConnectionInformation>
+</databaseConnectorConfiguration>
