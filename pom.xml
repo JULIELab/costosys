@@ -1,9 +1,9 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<artifactId>jedis</artifactId>
+	<artifactId>costosys</artifactId>
 	<version>1.0.0</version>
-	<name>Jena Document Information System</name>
+	<name>Corpus Storage System</name>
 	<description>A utility for managing documents stored in a PostgreSQL database. The documents are imported into a PostgreSQL DB as full texts with the goal to be able to retrieve the documents by their PubMedID efficiently. For more sophisticated tasks, a user configuration file can be delivered which can take control of the table schema to use, the PostgreSQL schema to use and the actual database server to connect to as well as the concrete database.</description>
 	<build>
 		<plugins>
@@ -143,10 +143,10 @@
 		<name>JULIE Lab, Germany</name>
 		<url>http://www.julielab.de</url>
 	</organization>
-	<url>https://github.com/JULIELab/jedis</url>
+	<url>https://github.com/JULIELab/costosys</url>
 	<scm>
-		<url>scm:git:https://github.com/JULIELab/jedis</url>
-		<connection>scm:git:git://github.com/JULIELab/jedis.git</connection>
-		<developerConnection>scm:git:git://github.com/JULIELab/jedis.git</developerConnection>
+		<url>scm:git:https://github.com/JULIELab/costosys</url>
+		<connection>scm:git:git://github.com/JULIELab/costosys.git</connection>
+		<developerConnection>scm:git:git://github.com/JULIELab/costosys.git</developerConnection>
 	</scm>
 </project>
