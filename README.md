@@ -1,5 +1,5 @@
-# JeDIS
-The Jena Document Information System (JeDIS) is a tool and abstraction layer for a PostgreSQL document database.
+# CoStoSys
+The Corpus Storage System (CoStoSys) is a tool and abstraction layer for a PostgreSQL document database.
 
 It has originally been built for Pubmed/Medline documents but is content-agnostic except that the input must be in some form of XML. Configurable XPath expressions are used to extract portions of XML into database table columns. The main usage of tool is currently to store whole medline citation XML data in the database.
 
