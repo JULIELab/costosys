@@ -25,13 +25,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -67,7 +64,7 @@ public class CLI {
 
 	private static boolean verbose = false;
 
-	public static String USER_SCHEME_DEFINITION = "dbcConfiguration.xml";
+	public static String[] USER_SCHEME_DEFINITION = new String[]{"dbcconfiguration.xml", "costosys.xml", "costosysconfiguration.xml"};
 
 	private static final String KEY_PART_SEPERATOR = "\t";
 
@@ -148,7 +145,7 @@ public class CLI {
 
 		// authentication
 		// config file
-		String dbcConfigPath = USER_SCHEME_DEFINITION;
+		String dbcConfigPath = findConfigurationFile();
 		if (cmd.hasOption("dbc"))
 			dbcConfigPath = cmd.getOptionValue("dbc");
 		File conf = new File(dbcConfigPath);
@@ -189,7 +186,7 @@ public class CLI {
 			} else {
 				logMessage(String.format(
 						"No custom configuration found (should be located at %s). Using default configuration.",
-						USER_SCHEME_DEFINITION));
+						Stream.of(USER_SCHEME_DEFINITION).collect(Collectors.joining(" or "))));
 				if (dbUrl == null)
 					dbc = new DataBaseConnector(serverName, dbName, user, password, pgSchema, null);
 				else
@@ -366,6 +363,16 @@ public class CLI {
 
 		time = System.currentTimeMillis() - time;
 		LOG.info(String.format("Processing took %d seconds.", time / 1000));
+	}
+
+	private static String findConfigurationFile() {
+		File workingDirectory = new File(".");
+		Set<String> possibleConfigFileNames = new HashSet<>(Arrays.asList(USER_SCHEME_DEFINITION));
+		for (String file : workingDirectory.list()) {
+			if (possibleConfigFileNames.contains(file.toLowerCase()))
+				return file;
+		}
+		return "<none found>";
 	}
 
 	private static void dropTableInteractively(DataBaseConnector dbc, String tableName) {
