@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+		   targetNamespace="http://julielab.de"
+		   xmlns="http://julielab.de" elementFormDefault="qualified">
 
 	<xs:element name="databaseConnectorConfiguration">
 		<xs:complexType>
 			<xs:sequence>
 				<xs:element ref="DBSchemaInformation" minOccurs="0"
-					maxOccurs="1"></xs:element>
+					maxOccurs="1"/>
 				<xs:element ref="DBConnectionInformation" minOccurs="0"
-					maxOccurs="1"></xs:element>
+					maxOccurs="1"/>
 			</xs:sequence>
 		</xs:complexType>
 	</xs:element>
@@ -17,14 +19,14 @@
 		<xs:complexType>
 			<xs:sequence>
 				<xs:element name="activePostgresSchema" type="xs:string"
-					minOccurs="0" maxOccurs="1"></xs:element>
+					minOccurs="0" maxOccurs="1"/>
 				<xs:element name="activeTableSchema" type="xs:string"
-					minOccurs="0" maxOccurs="1"></xs:element>
+					minOccurs="0" maxOccurs="1"/>
 				<xs:element name="activeDataPostgresSchema" type="xs:string"
-					minOccurs="0" maxOccurs="1"></xs:element>
+					minOccurs="0" maxOccurs="1"/>
 				<xs:element name="dataTable" type="xs:string" minOccurs="0"
-					maxOccurs="1"></xs:element>
-				<xs:element ref="tableSchemas" minOccurs="0" maxOccurs="1"></xs:element>
+					maxOccurs="1"/>
+				<xs:element ref="tableSchemas" minOccurs="0" maxOccurs="1"/>
 			</xs:sequence>
 		</xs:complexType>
 	</xs:element>
@@ -32,7 +34,7 @@
 	<xs:element name="tableSchemas">
 		<xs:complexType>
 			<xs:sequence>
-				<xs:element ref="tableSchema" minOccurs="0" maxOccurs="unbounded"></xs:element>
+				<xs:element ref="tableSchema" minOccurs="0" maxOccurs="unbounded"/>
 			</xs:sequence>
 		</xs:complexType>
 	</xs:element>
@@ -40,7 +42,7 @@
 	<xs:element name="tableSchema">
 		<xs:complexType>
 			<xs:sequence>
-				<xs:element ref="field" minOccurs="0" maxOccurs="unbounded"></xs:element>
+				<xs:element ref="field" minOccurs="0" maxOccurs="unbounded"/>
 			</xs:sequence>
 			<xs:attribute name="name" type="xs:string" use="required"></xs:attribute>
 			<xs:attribute name="forEach" type="xs:string" use="required"></xs:attribute>
@@ -75,10 +77,10 @@
 		<xs:complexType>
 			<xs:sequence>
 				<xs:element name="activeDBConnection" type="xs:string"
-					minOccurs="0" maxOccurs="1"></xs:element>
+					minOccurs="0" maxOccurs="1"/>
 				<xs:element name="maxActiveDBConnections" type="xs:integer"
-					minOccurs="0" maxOccurs="1"></xs:element>
-				<xs:element ref="DBConnections" minOccurs="0" maxOccurs="1"></xs:element>
+					minOccurs="0" maxOccurs="1"/>
+				<xs:element ref="DBConnections" minOccurs="0" maxOccurs="1"/>
 			</xs:sequence>
 		</xs:complexType>
 	</xs:element>
@@ -86,7 +88,7 @@
 	<xs:element name="DBConnections">
 		<xs:complexType>
 			<xs:sequence>
-				<xs:element ref="DBConnection" minOccurs="0" maxOccurs="unbounded"></xs:element>
+				<xs:element ref="DBConnection" minOccurs="0" maxOccurs="unbounded"/>
 			</xs:sequence>
 		</xs:complexType>
 	</xs:element>

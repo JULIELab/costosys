@@ -1,77 +1,77 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <!-- no Doctype, XML Schema used instead -->
 <databaseConnectorConfiguration
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:noNamespaceSchemaLocation="configuration.xsd">
+		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://julielab.de"
+		xsi:schemaLocation="http://julielab.de https://github.com/JULIELab/costosys/blob/v1.0.1/src/main/resources/configuration.xsd">
 	<DBSchemaInformation>
 		<activePostgresSchema>test</activePostgresSchema>
-		<activeTableSchema></activeTableSchema>
+		<activeTableSchema/>
 		<activeDataPostgresSchema>_data</activeDataPostgresSchema>
 		<dataTable>_data</dataTable>
 		<tableSchemas>
 			<tableSchema name="medline_2017"
 				forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"></field>
+					retrieve="true" gzip="true"/>
 			</tableSchema>
 			<tableSchema name="medline_2016" forEach="/MedlineCitationSet/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"></field>
+					retrieve="true" gzip="true"/>
 			</tableSchema>
 			<tableSchema name="pubmed_gzip"
 				forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"></field>
+					retrieve="true" gzip="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_text" forEach=".">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 				<field name="xmi" type="text" xpath="." returnXMLFragment="true"
-					retrieve="true"></field>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"></field>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"></field>
+					retrieve="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_annotation" forEach=".">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="false"></field>
+					retrieve="false"/>
 				<field name="xmi" type="text" xpath="." returnXMLFragment="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_text_gzip" forEach=".">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 				<field name="xmi" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"></field>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"></field>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"></field>
+					retrieve="true" gzip="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
 			</tableSchema>
-			<!-- This schema is supposed to only get te max_xmi_id field value of 
+			<!-- This schema is supposed to only get the max_xmi_id field value of
 				the xmi_text_gzip schema. -->
 			<tableSchema name="max_id_addition" forEach=".">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="false"></field>
+					retrieve="false"/>
 				<field name="xmi" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="false" gzip="true"></field>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"></field>
+					retrieve="false" gzip="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_annotation_gzip" forEach=".">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="false"></field>
+					retrieve="false"/>
 				<field name="xmi" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"></field>
+					retrieve="true" gzip="true"/>
 			</tableSchema>
 			<tableSchema name="dbc_junit_gzip" forEach="/MedlineCitationSet/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"></field>
+					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"></field>
+					retrieve="true" gzip="true"/>
 			</tableSchema>
 		</tableSchemas>
 	</DBSchemaInformation>
