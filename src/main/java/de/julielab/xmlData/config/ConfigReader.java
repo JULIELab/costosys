@@ -159,8 +159,6 @@ public class ConfigReader {
 	 *            - prepared default configuration file
 	 * @param userConfData
 	 *            - prepared user specific configuration file
-	 * @param xpath
-	 *            - path to the part to merge
 	 * @return - the merged configuration
 	 * @throws VTDException
 	 * @throws IOException
@@ -207,9 +205,10 @@ public class ConfigReader {
 		if (activeConfs[INDEX_SCHEMA].length() > 0) {
 			int newTextIndex = JulieXMLTools.setElementText(vn, ap, xm,
 					XPATH_ACTIVE_TABLE_SCHEMA, activeConfs[INDEX_SCHEMA]);
-			if (newTextIndex == -1)
+			if (newTextIndex == -1) {
 				throw new IllegalStateException(
-						"Unexpected error: The default configuration does not define an active table schema. Please define an active table schema in your user configuration.");
+						"There is no active table schema defined. Please define an active table schema in your user configuration.");
+			}
 		}
 		if (activeConfs[INDEX_DB].length() > 0) {
 			int newTextIndex = JulieXMLTools.setElementText(vn, ap, xm,
