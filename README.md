@@ -20,7 +20,7 @@ NOTE: This is work in progress.
     <databaseConnectorConfiguration
             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
             xmlns="http://julielab.de"
-            xsi:schemaLocation="http://julielab.de https://github.com/JULIELab/costosys/blob/v1.0.1/src/main/resources/configuration.xsd">
+            xsi:schemaLocation="http://julielab.de https://raw.githubusercontent.com/JULIELab/costosys/v1.0.1/src/main/resources/configuration.xsd">
         <DBSchemaInformation>
             <activePostgresSchema>mySchema</activePostgresSchema>
             <activeTableSchema>myTableSchema</activeTableSchema>
