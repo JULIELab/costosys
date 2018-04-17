@@ -365,7 +365,7 @@ public class CLI {
 		LOG.info(String.format("Processing took %d seconds.", time / 1000));
 	}
 
-	private static String findConfigurationFile() {
+	public static String findConfigurationFile() {
 		File workingDirectory = new File(".");
 		Set<String> possibleConfigFileNames = new HashSet<>(Arrays.asList(USER_SCHEME_DEFINITION));
 		for (String file : workingDirectory.list()) {
