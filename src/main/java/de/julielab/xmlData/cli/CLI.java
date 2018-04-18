@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import de.julielab.xmlData.config.TableSchemaDoesNotExistException;
+import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -46,7 +48,6 @@ import org.slf4j.LoggerFactory;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
 import de.julielab.xmlData.Constants;
-import de.julielab.xmlData.config.TableSchemaDoesNotExistException;
 import de.julielab.xmlData.dataBase.DataBaseConnector;
 import de.julielab.xmlData.dataBase.SubsetStatus;
 
@@ -80,7 +81,7 @@ public class CLI {
 		LOG.info(msg);
 	}
 
-	public static void main(String[] args) throws SQLException {
+	public static void main(String[] args) throws SQLException, TableSchemaMismatchException {
 		long time = System.currentTimeMillis();
 		String dbUrl;
 		String user;

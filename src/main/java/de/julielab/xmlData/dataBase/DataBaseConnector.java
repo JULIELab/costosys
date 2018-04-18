@@ -15,43 +15,7 @@
 
 package de.julielab.xmlData.dataBase;
 
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Exchanger;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.sql.DataSource;
-
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.zaxxer.hikari.HikariDataSource;
-
 import de.julielab.hiddenConfig.HiddenConfig;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
@@ -61,6 +25,20 @@ import de.julielab.xmlData.config.ConfigReader;
 import de.julielab.xmlData.config.DBConfig;
 import de.julielab.xmlData.config.FieldConfig;
 import de.julielab.xmlData.config.FieldConfigurationManager;
+import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.sql.DataSource;
+import java.io.*;
+import java.sql.*;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Exchanger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * This class creates a connection with a database and allows for convenient
@@ -149,6 +127,32 @@ public class DataBaseConnector {
      *************************** Constructors ********************************
      **************************************************************************/
 
+
+    public DataBaseConnector(String configPath) throws FileNotFoundException {
+        this(findConfigurationFile(configPath));
+    }
+
+    private static InputStream findConfigurationFile(String configPath) throws FileNotFoundException {
+        LOG.debug("Loading DatabaseConnector configuration file from path \"{}\"", configPath);
+        File dbcConfigFile = new File(configPath);
+        InputStream is;
+        if (dbcConfigFile.exists()) {
+            LOG.debug("Found database configuration at file {}", dbcConfigFile);
+            is = new FileInputStream(configPath);
+        }
+        else {
+            String cpResource = configPath.startsWith("/") ? configPath : "/" + configPath;
+            LOG.debug("The database configuration file could not be found as a file at {}. Trying to lookup configuration as a classpath resource at {}", dbcConfigFile, cpResource);
+            is = DataBaseConnector.class.getResourceAsStream(cpResource);
+            if (is != null)
+                LOG.debug("Found database configuration file as classpath resource at {}", cpResource);
+        }
+        if (is == null) {
+            throw new IllegalArgumentException("DatabaseConnector configuration " + configPath + " could not be found as file or a classpath resource.");
+        }
+        return  is;
+    }
+
     /**
      * This class creates a connection with a database and allows for convenient
      * queries and commands.
@@ -216,7 +220,6 @@ public class DataBaseConnector {
      * @param password       the password for the username
      * @param queryBatchSize background threads are utilized to speed up queries, this
      *                       parameter determines the number of pre-fetched entries
-     * @param driver         name of the driver to load, only postgres was tested!
      * @param configStream   used to read the configuration for this connector instance
      */
     public DataBaseConnector(String dbUrl, String user, String password, String pgSchema, int queryBatchSize,
@@ -413,7 +416,6 @@ public class DataBaseConnector {
      * @param hostName        - will be saved in the subset table
      * @param pid             - will be saved in the subset table
      * @return An ArrayList of pmids which have not yet been processed
-     * @see #retrieveAndMark(String, String, String, int, boolean)
      */
     public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid) {
         return retrieveAndMark(subsetTableName, readerComponent, hostName, pid, RETRIEVE_MARK_LIMIT, null);
@@ -1017,7 +1019,7 @@ public class DataBaseConnector {
 
     /**
      * <p>
-     * Does the same as {@link #createSubsetTable(String, String, String, String)}
+     * Does the same as {@link #createSubsetTable(String, String, Integer, String, String)}
      * with the exception that the assumed table schema is that of the active schema
      * defined in the configuration file.
      * </p>
@@ -1029,7 +1031,6 @@ public class DataBaseConnector {
      * @param comment          will be added to the table in the database, used to make tables
      *                         reproducable
      * @throws SQLException
-     * @see #createSubsetTable(String, String, String, String)
      */
     public void createSubsetTable(String subsetTable, String supersetTable, Integer maxNumberRefHops, String comment)
             throws SQLException {
@@ -1038,9 +1039,9 @@ public class DataBaseConnector {
 
     /**
      * <p>
-     * Does the same as {@link #createSubsetTable(String, String, String, String)}
+     * Does the same as {@link #createSubsetTable(String, String, Integer, String, String)}
      * with the exception that the assumed table schema is that of the active schema
-     * defined in the configuration file.
+     * defined in the configuration file and the first referenced data table is used as data table.
      * </p>
      *
      * @param subsetTable   name of the subset table
@@ -1048,7 +1049,6 @@ public class DataBaseConnector {
      * @param comment       will be added to the table in the database, used to make tables
      *                      reproducable
      * @throws SQLException
-     * @see #createSubsetTable(String, String, String, String)
      */
     public void createSubsetTable(String subsetTable, String supersetTable, String comment) throws SQLException {
         createSubsetTable(subsetTable, supersetTable, null, comment, activeTableSchema);
@@ -1549,7 +1549,6 @@ public class DataBaseConnector {
      * @param supersetTable
      * @param comment
      * @throws SQLException
-     * @see #initMirrorSubset(String, String)
      */
     public void defineMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate, String comment)
             throws SQLException {
@@ -1570,7 +1569,6 @@ public class DataBaseConnector {
      * @param comment
      * @throws SQLException
      * @see #createSubsetTable(String, String, Integer, String)
-     * @see #initMirrorSubset(String, String)
      */
     public void defineMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate,
                                    Integer maxNumberRefHops, String comment) throws SQLException {
@@ -1589,7 +1587,6 @@ public class DataBaseConnector {
      * @param comment
      * @param schemaName
      * @throws SQLException
-     * @add {@link #defineMirrorSubset(String, String, String, String)}
      */
     public void defineMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate, String comment,
                                    String schemaName) throws SQLException {
@@ -1983,7 +1980,6 @@ public class DataBaseConnector {
      * @param subsetTableName
      * @param pkValues
      * @return
-     * @see #resetSubset(String, Collection, String)
      */
     public int[] resetSubset(String subsetTableName, List<Object[]> pkValues) {
         return resetSubset(subsetTableName, pkValues, activeTableSchema);
@@ -2211,7 +2207,6 @@ public class DataBaseConnector {
     /**
      * @param it
      * @param tableName
-     * @see #importFromRowIterator(Iterator, String, String)
      */
     public void importFromRowIterator(Iterator<Map<String, Object>> it, String tableName) {
         importFromRowIterator(it, tableName, null, true, activeTableSchema);
@@ -2806,7 +2801,7 @@ public class DataBaseConnector {
      * timestamp newer (>) than <code>timestamp</code>. The Iterator will use
      * threads, memory and a connection until all matches are returned.
      *
-     * @param id        - List with primary keys
+     * @param ids       - List with primary keys
      * @param table     - table to query
      * @param timestamp - timestamp (only rows with newer timestamp are returned)
      * @return - pmid and xml as an Iterator<byte[][]>
@@ -2947,11 +2942,6 @@ public class DataBaseConnector {
      *
      * @param tableName      Name of a data table.
      * @param whereCondition Optional additional specifications for the SQL "SELECT" statement.
-     * @param schemaName     The table schema name to determine which columns should be
-     *                       retrieved. // * @return An iterator over <code>byte[][]</code> .
-     *                       Each returned byte array contains one nested byte array for each
-     *                       retrieved column, holding the column's data in a sequence of
-     *                       bytes.
      * @see #queryDataTable(String, String, String)
      */
     public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition) {
@@ -3089,7 +3079,6 @@ public class DataBaseConnector {
      * @param limitParam
      * @return
      * @throws SQLException
-     * @see #querySubset(String, String, long)
      */
     public DBCIterator<byte[][]> querySubset(String tableName, long limitParam) throws SQLException {
         return querySubset(tableName, null, limitParam, 0, activeTableSchema);
@@ -3423,6 +3412,10 @@ public class DataBaseConnector {
         return fieldConfigs.get(activeTableSchema);
     }
 
+    public void addFieldConfiguration(FieldConfig config) {
+        fieldConfigs.put(config.getName(), config);
+    }
+
     /**
      * @param schemaName The name of the schema for which the eventual
      *                   <code>FieldConfig</code> should be returned.
@@ -3441,7 +3434,7 @@ public class DataBaseConnector {
      * @return
      * @see #checkTableDefinition(String, String)
      */
-    public void checkTableDefinition(String tableName) {
+    public void checkTableDefinition(String tableName) throws TableSchemaMismatchException {
         checkTableDefinition(tableName, activeTableSchema);
     }
 
@@ -3454,7 +3447,7 @@ public class DataBaseConnector {
      *
      * @param tableName - table to check
      */
-    public void checkTableDefinition(String tableName, String schemaName) {
+    public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         List<String> actualColumns = new ArrayList<>();
@@ -3518,7 +3511,7 @@ public class DataBaseConnector {
         Collections.sort(definedColumns);
         Collections.sort(actualColumns);
         if (!definedColumns.equals(actualColumns))
-            throw new IllegalStateException("Table used table schema definition \"" + schemaName
+            throw new TableSchemaMismatchException("Table used table schema definition \"" + schemaName
                     + "\" does not match the actual schema of the table \"" + tableName + "\": Expected: "
                     + StringUtils.join(definedColumns, " ") + "; actual: " + StringUtils.join(actualColumns, " "));
 
@@ -3624,7 +3617,7 @@ public class DataBaseConnector {
         return pkIndices;
     }
 
-    public void checkTableSchemaCompatibility(String... schemaNames) {
+    public void checkTableSchemaCompatibility(String... schemaNames) throws TableSchemaMismatchException {
         if (null == schemaNames || schemaNames.length == 0) {
             LOG.warn("No table schema names were passed - nothing to check.");
             return;
@@ -3646,9 +3639,9 @@ public class DataBaseConnector {
             }
         }
         if (!notMatchingSchemaNames.isEmpty())
-            throw new IllegalArgumentException(
-                    "There were at least one table schema pair that is not compatible to each other because their primary keys differ. The table schema \""
-                            + referenceSchemaName + "\" has another primary key than the table schema(s) \""
+            throw new TableSchemaMismatchException(
+                    "Found incompatibility of table schema definitions with schemas " + StringUtils.join(schemaNames, ", ") + ": There were at least one table schema pair that is not compatible to each other because their primary keys differ. The table schema \""
+                            + referenceSchemaName + "\" has the primary key \"" + fieldConfigs.get(referenceSchemaName).getPrimaryKeyString() + "\" which differs from the table schema(s) \""
                             + StringUtils.join(notMatchingSchemaNames, ", ") + "\".");
     }
 

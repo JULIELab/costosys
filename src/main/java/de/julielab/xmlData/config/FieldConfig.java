@@ -84,6 +84,42 @@ public class FieldConfig extends ConfigBase {
 		buildFields(configData, schemaName);
 	}
 
+	public FieldConfig(List<Map<String, String>> fields, String forEachXPath, String schemaName) {
+        this.forEachXPath = forEachXPath;
+        this.name = schemaName;
+		this.fields = fields;
+		fieldNameMap = new HashMap<>();
+		for (Map<String, String> field : fields) {
+			String name = field.get(JulieXMLConstants.NAME);
+			if (name == null)
+				throw new IllegalArgumentException("The passed field configuration contains the field \"" + field + "\" " +
+						"that does specify the required \"" + JulieXMLConstants.NAME + "\" property");
+            if (field.get(JulieXMLConstants.TYPE) == null)
+                throw new IllegalArgumentException("The passed field configuration contains the field \"" + field + "\" " +
+                        "that does specify the required \"" + JulieXMLConstants.TYPE + "\" property");
+            fieldNameMap.put(name, field);
+            if (field.get(JulieXMLConstants.TIMESTAMP) != null && Boolean.parseBoolean(field.get(JulieXMLConstants.TIMESTAMP)))
+                timestampFieldName = name;
+		}
+        primaryKey = fields.stream().
+                filter(field -> Boolean.parseBoolean((field.get(JulieXMLConstants.PRIMARY_KEY)))).
+                map(field -> field.get(JulieXMLConstants.NAME)).
+                toArray(String[]::new);
+		columns = fields.stream().
+                map(field -> field.get(JulieXMLConstants.NAME)).
+                toArray(String[]::new);
+		columnsToRetrieve = fields.stream().
+                filter(field -> Boolean.parseBoolean((field.get(JulieXMLConstants.RETRIEVE)))).
+                map(field -> field.get(JulieXMLConstants.NAME)).
+                toArray(String[]::new);
+        primaryKeyFieldNumbers = new ArrayList<>();
+        for (int i = 0; i < fields.size(); i++) {
+            Map<String, String> field =  fields.get(i);
+            if (Boolean.parseBoolean((field.get(JulieXMLConstants.PRIMARY_KEY))))
+                primaryKeyFieldNumbers.add(i);
+        }
+	}
+
 	private void buildFields(byte[] mergedConfData, String activeSchemeName)
 			throws EncodingException, EOFException, EntityException, ParseException,
 			XPathParseException, XPathEvalException, NavException, PilotException {
@@ -326,7 +362,9 @@ public class FieldConfig extends ConfigBase {
 	}
 
 	public String getConfigText() {
+	    if (configData != null)
 		return new String(configData);
+	    return "<no XML definition available>";
 	}
 
 	private final String name;
@@ -343,4 +381,15 @@ public class FieldConfig extends ConfigBase {
 		return columns;
 	}
 
+    public static Map<String, String> createField(String... configuration) {
+	    if (configuration.length % 2 == 1)
+            throw new IllegalArgumentException("An even number of arguments is required. The even indexes " +
+                    "are field property keys, the odd indexes are the values to the previous key.");
+        Map<String, String> field = new HashMap<>();
+        for (int i = 0; i < configuration.length; i = i + 2) {
+            String s = configuration[i];
+            field.put(s, configuration[i + 1]);
+        }
+        return field;
+    }
 }

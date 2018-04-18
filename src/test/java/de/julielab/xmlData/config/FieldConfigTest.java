@@ -17,12 +17,15 @@
  * 
  */
 package de.julielab.xmlData.config;
-
+import static de.julielab.xmlData.config.FieldConfig.createField;
+import static org.assertj.core.api.Assertions.*;
 import static org.junit.Assert.assertEquals;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -87,6 +90,33 @@ public class FieldConfigTest {
 		assertEquals("true", field2.get(JulieXMLConstants.RETRIEVE));
 		assertEquals("true", field2.get(JulieXMLConstants.PRIMARY_KEY));
 	}
-	
+
+	@Test
+	public void testIncompleteProgramaticallyDefinedFieldConfig() {
+	    // test that incomplete field definitions are caught
+		List<Map<String, String>> fields = new ArrayList<>();
+		Map<String, String> field = new HashMap<>();
+		field.put(JulieXMLConstants.NAME, "field1");
+		fields.add(field);
+		// The type property is missing
+        assertThatThrownBy(() -> new FieldConfig(fields, "", "testschema")).hasMessageContaining("required \"" + JulieXMLConstants.TYPE + "\" property");
+        field.remove(JulieXMLConstants.NAME);
+        field.put(JulieXMLConstants.TYPE, "type1");
+        // Now the name property is missing
+        assertThatThrownBy(() -> new FieldConfig(fields, "", "testschema")).hasMessageContaining("required \"" + JulieXMLConstants.NAME + "\" property");
+	}
+
+	@Test
+    public void testProgrammaticallyDefinedFieldConfig() {
+        // test that incomplete field definitions are caught
+        List<Map<String, String>> fields = new ArrayList<>();
+        fields.add(createField(JulieXMLConstants.NAME, "field1",JulieXMLConstants.TYPE, "type1", JulieXMLConstants.PRIMARY_KEY, "true"));
+        fields.add(createField(JulieXMLConstants.NAME, "field2", JulieXMLConstants.TYPE, "type2", JulieXMLConstants.PRIMARY_KEY, "true"));
+        fields.add(createField(JulieXMLConstants.NAME, "field3",JulieXMLConstants.TYPE, "type3", JulieXMLConstants.RETRIEVE, "true"));
+        FieldConfig config = new FieldConfig(fields, "foreach", "testschema");
+        assertThat(config.getPrimaryKeyString()).isEqualToIgnoringWhitespace("field1,field2");
+        assertThat(config.getColumnsToRetrieve()).isEqualTo(new String[]{"field3"});
+        assertThat(config.getForEachXPath()).isEqualTo("foreach");
+    }
 }
 
