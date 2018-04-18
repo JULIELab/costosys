@@ -8,7 +8,7 @@
     </encoder>
   </appender>
   
-  <logger name="de.julielab" level="DEBUG"/>
+  <logger name="de.julielab" level="TRACE"/>
   <logger name="org.dbunit" level="INFO"/>
 
   <root level="DEBUG">

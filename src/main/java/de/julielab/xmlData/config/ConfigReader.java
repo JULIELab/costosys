@@ -18,10 +18,8 @@ package de.julielab.xmlData.config;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -48,7 +46,7 @@ import de.julielab.xml.JulieXMLTools;
 public class ConfigReader {
 
 	private static final Logger LOG = LoggerFactory
-			.getLogger(FieldConfig.class);
+			.getLogger(ConfigReader.class);
 	private final static int BUFFER_SIZE = 1000;
 	public static final String DEFAULT_DEFINITION = "/defaultConfiguration.xml";
 
@@ -171,8 +169,10 @@ public class ConfigReader {
 		VTDNav vn = vg.getNav();
 		AutoPilot ap = new AutoPilot(vn);
 
-		if (userConfData == null)
-			return defaultConfData;
+		if (userConfData == null) {
+		    return defaultConfData;
+            //throw new IllegalArgumentException("No CoStoSys user configuration was passed.");
+        }
 
 		XMLModifier xm = new XMLModifier(vn);
 
@@ -199,15 +199,18 @@ public class ConfigReader {
 		// connection and more
 		// from the user configuration, if these declarations exist.
 		String[] activeConfs = getActiveConfigurations(userConfData);
+		LOG.debug("Found the following active configurations in the user data: {}", Arrays.toString(activeConfs));
 
 		// Insert the active configurations into the merged configuration, thus
 		// overwriting the defaults.
 		if (activeConfs[INDEX_SCHEMA].length() > 0) {
 			int newTextIndex = JulieXMLTools.setElementText(vn, ap, xm,
 					XPATH_ACTIVE_TABLE_SCHEMA, activeConfs[INDEX_SCHEMA]);
+			LOG.trace("Set the active table schema to {}. Returned new index: {}", activeConfs[INDEX_SCHEMA], newTextIndex);
 			if (newTextIndex == -1) {
 				throw new IllegalStateException(
-						"There is no active table schema defined. Please define an active table schema in your user configuration.");
+						"There is no active table schema defined. Please define an active table schema in your user " +
+                                " configuration. The user configuration is: " + new String(userConfData, StandardCharsets.UTF_8));
 			}
 		}
 		if (activeConfs[INDEX_DB].length() > 0) {
@@ -328,14 +331,15 @@ public class ConfigReader {
 		AutoPilot ap = new AutoPilot(vn);
 
 		String[] activeConfigurations = new String[6];
+		ap.selectXPath(XPATH_ACTIVE_PG_SCHEMA);
+		activeConfigurations[INDEX_PG_SCHEMA] = ap.evalXPathToString();
+
 		ap.selectXPath(XPATH_ACTIVE_TABLE_SCHEMA);
 		activeConfigurations[INDEX_SCHEMA] = ap.evalXPathToString();
 
 		ap.selectXPath(XPATH_ACTIVE_DB);
 		activeConfigurations[INDEX_DB] = ap.evalXPathToString();
 
-		ap.selectXPath(XPATH_ACTIVE_PG_SCHEMA);
-		activeConfigurations[INDEX_PG_SCHEMA] = ap.evalXPathToString();
 
 		ap.selectXPath(XPATH_MAX_CONNS);
 		activeConfigurations[INDEX_MAX_CONNS] = ap.evalXPathToString();
@@ -345,7 +349,7 @@ public class ConfigReader {
 
 		ap.selectXPath(XPATH_DATA_SCHEMA);
 		activeConfigurations[INDEX_DATA_SCHEMA] = ap.evalXPathToString();
-		
+
 		return activeConfigurations;
 	}
 
@@ -355,8 +359,6 @@ public class ConfigReader {
 	 * 
 	 * @param confData
 	 *            - prepared XML
-	 * @param xpath
-	 *            - path to the retrieved configuration element
 	 * @return - the retrieved element
 	 * @throws IOException
 	 * @throws VTDException

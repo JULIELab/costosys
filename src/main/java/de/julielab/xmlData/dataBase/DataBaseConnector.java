@@ -2924,9 +2924,17 @@ public class DataBaseConnector {
         return new ArrayIter(ids, table, schemaName);
     }
 
-    // Retrieves data joined from multiple tables.
-    public DBCIterator<byte[][]> queryIDAndXML(List<Object[]> ids, String[] table, String[] schemaName) {
-        return new ArrayIter(ids, table, schemaName);
+    /**
+     * Retrieves data from the database over multiple tables. All tables will be joined on the given IDs.
+     * The columns to be retrieved for each table is determined by its table schema. For this purpose, the
+     * <code>tables</code> and <code>schemaName</code> arrays are required to be parallel.
+     * @param ids A list of primary keys identifying the items to retrieve.
+     * @param tables The tables from which the items should be retrieved that are identified by <code>ids</code>.
+     * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
+     * @return The joined data from the requested tables.
+     */
+    public DBCIterator<byte[][]> queryIDAndXML(List<Object[]> ids, String[] tables, String[] schemaNames) {
+        return new ArrayIter(ids, tables, schemaNames);
     }
 
     /**
@@ -3747,7 +3755,15 @@ public class DataBaseConnector {
             update();
         }
 
-        // Used when multiple tables are joined.
+        /**
+         * Retrieves data from the database over multiple tables. All tables will be joined on the given IDs.
+         * The columns to be retrieved for each table is determined by its table schema. For this purpose, the
+         * <code>tables</code> and <code>schemaName</code> arrays are required to be parallel.
+         * @param ids A list of primary keys identifying the items to retrieve.
+         * @param tables The tables from which the items should be retrieved that are identified by <code>ids</code>.
+         * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
+         * @return The joined data from the requested tables.
+         */
         public ArrayIter(List<Object[]> ids, String[] tables, String[] schemaNames) {
             backgroundThread = new ArrayResToListThread(listExchanger, ids, tables, null, schemaNames);
             update();

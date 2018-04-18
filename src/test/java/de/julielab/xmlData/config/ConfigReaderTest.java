@@ -262,4 +262,10 @@ public class ConfigReaderTest {
 		assertEquals("userTableSchema2", schemaNames.get(1));
 	}
 
+	@Test
+	public void testMuh(){
+		InputStream is = ConfigReaderTest.class
+				.getResourceAsStream("/dbcConfiguration.xml");
+		ConfigReader cr = new ConfigReader(is);
+	}
 }

@@ -335,10 +335,25 @@ public class FieldConfig extends ConfigBase {
 		return StringUtils.join(getPrimaryKey(), ",");
 	}
 
+    /**
+     * Takes an array of format strings according to {@link String#format(String, Object...)} with a single %s symbol.
+     * The number of format
+     * string must be equal to the number of primary key elements of this table schema definition. Then, for the
+     * <code>i</code>th format string, the <code>i</code>th primary key element is applied.
+     * @param fmtStrs The format string to fill with primary key elements, one format string per primary key element.
+     * @return An array of strings corresponding to the format strings filled with the primary key elements.
+     * @see {@link String#format(String, Object...)}
+     */
 	public String[] expandPKNames(String[] fmtStrs) {
 		return JulieXMLTools.expandArrayEntries(getPrimaryKey(), fmtStrs);
 	}
 
+    /**
+     * Applies each primary key element to the format string and returns the results as array. Each result element
+     * corresponds to one primary key element applied to the format string.
+     * @param fmtStr The format string to be filled with the primary key elements.
+     * @return All results corresponding to applying each primary key element once to the given format string.
+     */
 	public String[] expandPKNames(String fmtStr) {
 		return JulieXMLTools.expandArrayEntries(getPrimaryKey(), fmtStr);
 	}
