@@ -132,27 +132,6 @@ public class DataBaseConnector {
         this(findConfigurationFile(configPath));
     }
 
-    private static InputStream findConfigurationFile(String configPath) throws FileNotFoundException {
-        LOG.debug("Loading DatabaseConnector configuration file from path \"{}\"", configPath);
-        File dbcConfigFile = new File(configPath);
-        InputStream is;
-        if (dbcConfigFile.exists()) {
-            LOG.debug("Found database configuration at file {}", dbcConfigFile);
-            is = new FileInputStream(configPath);
-        }
-        else {
-            String cpResource = configPath.startsWith("/") ? configPath : "/" + configPath;
-            LOG.debug("The database configuration file could not be found as a file at {}. Trying to lookup configuration as a classpath resource at {}", dbcConfigFile, cpResource);
-            is = DataBaseConnector.class.getResourceAsStream(cpResource);
-            if (is != null)
-                LOG.debug("Found database configuration file as classpath resource at {}", cpResource);
-        }
-        if (is == null) {
-            throw new IllegalArgumentException("DatabaseConnector configuration " + configPath + " could not be found as file or a classpath resource.");
-        }
-        return  is;
-    }
-
     /**
      * This class creates a connection with a database and allows for convenient
      * queries and commands.
@@ -256,6 +235,26 @@ public class DataBaseConnector {
      */
     public DataBaseConnector(String dbUrl, String user, String password) {
         this(dbUrl, user, password, null, DEFAULT_QUERY_BATCH_SIZE, null);
+    }
+
+    private static InputStream findConfigurationFile(String configPath) throws FileNotFoundException {
+        LOG.debug("Loading DatabaseConnector configuration file from path \"{}\"", configPath);
+        File dbcConfigFile = new File(configPath);
+        InputStream is;
+        if (dbcConfigFile.exists()) {
+            LOG.debug("Found database configuration at file {}", dbcConfigFile);
+            is = new FileInputStream(configPath);
+        } else {
+            String cpResource = configPath.startsWith("/") ? configPath : "/" + configPath;
+            LOG.debug("The database configuration file could not be found as a file at {}. Trying to lookup configuration as a classpath resource at {}", dbcConfigFile, cpResource);
+            is = DataBaseConnector.class.getResourceAsStream(cpResource);
+            if (is != null)
+                LOG.debug("Found database configuration file as classpath resource at {}", cpResource);
+        }
+        if (is == null) {
+            throw new IllegalArgumentException("DatabaseConnector configuration " + configPath + " could not be found as file or a classpath resource.");
+        }
+        return is;
     }
 
     public ConfigReader getConfig() {
@@ -2928,8 +2927,9 @@ public class DataBaseConnector {
      * Retrieves data from the database over multiple tables. All tables will be joined on the given IDs.
      * The columns to be retrieved for each table is determined by its table schema. For this purpose, the
      * <code>tables</code> and <code>schemaName</code> arrays are required to be parallel.
-     * @param ids A list of primary keys identifying the items to retrieve.
-     * @param tables The tables from which the items should be retrieved that are identified by <code>ids</code>.
+     *
+     * @param ids         A list of primary keys identifying the items to retrieve.
+     * @param tables      The tables from which the items should be retrieved that are identified by <code>ids</code>.
      * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
      * @return The joined data from the requested tables.
      */
@@ -3519,9 +3519,10 @@ public class DataBaseConnector {
         Collections.sort(definedColumns);
         Collections.sort(actualColumns);
         if (!definedColumns.equals(actualColumns))
-            throw new TableSchemaMismatchException("Table used table schema definition \"" + schemaName
-                    + "\" does not match the actual schema of the table \"" + tableName + "\": Expected: "
-                    + StringUtils.join(definedColumns, " ") + "; actual: " + StringUtils.join(actualColumns, " "));
+            throw new TableSchemaMismatchException("The existing database table \"" + tableName + "\" has the following " +
+                    "columns: \"" + StringUtils.join(actualColumns, " ") + "\". However, the CoStoSys table " +
+                    "schema \"" + schemaName + "\" that is used to operate on that table specifies a different set of columns:" +
+                    StringUtils.join(definedColumns, " "));
 
     }
 
@@ -3759,8 +3760,9 @@ public class DataBaseConnector {
          * Retrieves data from the database over multiple tables. All tables will be joined on the given IDs.
          * The columns to be retrieved for each table is determined by its table schema. For this purpose, the
          * <code>tables</code> and <code>schemaName</code> arrays are required to be parallel.
-         * @param ids A list of primary keys identifying the items to retrieve.
-         * @param tables The tables from which the items should be retrieved that are identified by <code>ids</code>.
+         *
+         * @param ids         A list of primary keys identifying the items to retrieve.
+         * @param tables      The tables from which the items should be retrieved that are identified by <code>ids</code>.
          * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
          * @return The joined data from the requested tables.
          */
