@@ -5,7 +5,7 @@
         xmlns="http://julielab.de"
 		xsi:schemaLocation="http://julielab.de https://raw.githubusercontent.com/JULIELab/costosys/v1.0.1/src/main/resources/configuration.xsd">
 	<DBSchemaInformation>
-		<activePostgresSchema>test</activePostgresSchema>
+		<activePostgresSchema>public</activePostgresSchema>
 		<activeTableSchema/>
 		<activeDataPostgresSchema>_data</activeDataPostgresSchema>
 		<dataTable>_data</dataTable>

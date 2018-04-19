@@ -59,8 +59,6 @@ import java.util.stream.Stream;
 public class DataBaseConnector {
 
     public static final String DEFAULT_PIPELINE_STATE = "<none>";
-    public static final int PMID_IN_ARRAY = 0;
-    public static final int XML_IN_ARRAY = 1;
     /**
      * Used as a hack for the not-yet-published EMNLP-Paper. In the meantime, a more
      * sophisticated system has been implemented (EF, 18.01.2012)
@@ -257,13 +255,13 @@ public class DataBaseConnector {
         return is;
     }
 
+    public void setQueryBatchSize(int queryBatchSize) {
+        this.queryBatchSize = queryBatchSize;
+    }
+
     public ConfigReader getConfig() {
         return config;
     }
-
-    /**************************************************************************
-     ************************* Helper Methods ********************************
-     **************************************************************************/
 
     /**
      * @param dbUrl
@@ -1697,8 +1695,7 @@ public class DataBaseConnector {
     }
 
     /**
-     * Defines a subset by populating a subset table with primary keys from another
-     * table.
+     * Initializes <code>subsetTable</code> by inserting one row for each entry in <code>supersetTable</code>.
      *
      * @param subsetTable
      * @param supersetTable
@@ -3267,9 +3264,23 @@ public class DataBaseConnector {
         return numColumnsAndFields;
     }
 
-    /*******************************
-     * Classes for queryIDAndXML
-     *******************************************/
+    /**
+     * Returns the row count of the requested table.
+     * @param tableName The table to count the rows of.
+     * @return The table row count.
+     */
+    public long getNumRows(String tableName) {
+        try (Connection conn = getConn()) {
+            String sql = String.format("SELECT num(1) as %s FROM %s", Constants.TOTAL, tableName);
+            ResultSet resultSet = conn.createStatement().executeQuery(sql);
+            if (resultSet.next()) {
+                return resultSet.getLong(Constants.TOTAL);
+            }
+        } catch (SQLException e) {
+            LOG.error("Error when trying to determine size of table {}: {}", tableName, e);
+        }
+        return 0;
+    }
 
     /**
      * Returns a map with information about how many rows are marked as
@@ -3284,7 +3295,7 @@ public class DataBaseConnector {
      * subset table <tt>subsetTableName</tt>
      * @throws TableNotFoundException If <tt>subsetTableName</tt> does not point to a database table.
      */
-    public SubsetStatus status(String subsetTableName) throws TableNotFoundException {
+    public SubsetStatus status(String subsetTableName, Set<StatusElement> statusElementsToReturn) throws TableNotFoundException {
         if (!tableExists(subsetTableName))
             throw new TableNotFoundException("The subset table \"" + subsetTableName + "\" does not exist.");
 
@@ -3292,24 +3303,37 @@ public class DataBaseConnector {
 
         Connection conn = null;
         try {
+            StringJoiner joiner = new StringJoiner(",");
+            String sumFmtString = "sum(case when %s=TRUE then 1 end) as %s";
+            if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
+                joiner.add(String.format(sumFmtString, Constants.HAS_ERRORS, Constants.HAS_ERRORS));
+            if (statusElementsToReturn.contains(StatusElement.IS_PROCESSED))
+                joiner.add(String.format(sumFmtString, Constants.IS_PROCESSED, Constants.IS_PROCESSED));
+            if (statusElementsToReturn.contains(StatusElement.IN_PROCESS))
+                joiner.add(String.format(sumFmtString, Constants.IN_PROCESS, Constants.IN_PROCESS));
+            if (statusElementsToReturn.contains(StatusElement.TOTAL))
+                joiner.add(String.format("sum(1) as %s", Constants.TOTAL));
             conn = getConn();
             String sql = String.format(
-                    "SELECT sum(case when %s=TRUE then 1 end) as %s, " + "sum(case when %s=TRUE then 1 end) as %s,"
-                            + "sum(case when %s=TRUE then 1 end) as %s," + "sum(1) as %s FROM %s",
+                    "SELECT " + joiner.toString() + " FROM %s",
                     Constants.HAS_ERRORS, Constants.HAS_ERRORS, Constants.IS_PROCESSED, Constants.IS_PROCESSED,
                     Constants.IN_PROCESS, Constants.IN_PROCESS, Constants.TOTAL, subsetTableName);
             Statement stmt = conn.createStatement();
             {
                 ResultSet res = stmt.executeQuery(sql);
                 if (res.next()) {
-                    status.hasErrors = res.getLong(Constants.HAS_ERRORS);
-                    status.inProcess = res.getLong(Constants.IN_PROCESS);
-                    status.isProcessed = res.getLong(Constants.IS_PROCESSED);
-                    status.total = res.getLong(Constants.TOTAL);
+                    if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
+                        status.hasErrors = res.getLong(Constants.HAS_ERRORS);
+                    if (statusElementsToReturn.contains(StatusElement.IN_PROCESS))
+                        status.inProcess = res.getLong(Constants.IN_PROCESS);
+                    if (statusElementsToReturn.contains(StatusElement.IS_PROCESSED))
+                        status.isProcessed = res.getLong(Constants.IS_PROCESSED);
+                    if (statusElementsToReturn.contains(StatusElement.TOTAL))
+                        status.total = res.getLong(Constants.TOTAL);
                 }
             }
 
-            {
+            if (statusElementsToReturn.contains(StatusElement.LAST_COMPONENT)) {
                 SortedMap<String, Long> pipelineStates = new TreeMap<>();
                 status.pipelineStates = pipelineStates;
                 String pipelineStateSql = String.format("SELECT %s,count(%s) from %s group by %s",
@@ -3394,10 +3418,6 @@ public class DataBaseConnector {
         return columns;
     }
 
-    /*******************************
-     * Classes for query()
-     *******************************************/
-
     /**
      * @return - the active Postgres scheme
      */
@@ -3412,6 +3432,10 @@ public class DataBaseConnector {
         }
         return scheme;
     }
+
+    /*******************************
+     * Classes for query()
+     *******************************************/
 
     /**
      * @return the active field configuration
@@ -3433,10 +3457,6 @@ public class DataBaseConnector {
         return fieldConfigs.get(schemaName);
     }
 
-    /**************************
-     * Class for queryAll()
-     *****************************************/
-
     /**
      * @param tableName
      * @return
@@ -3445,6 +3465,10 @@ public class DataBaseConnector {
     public void checkTableDefinition(String tableName) throws TableSchemaMismatchException {
         checkTableDefinition(tableName, activeTableSchema);
     }
+
+    /**************************
+     * Class for queryAll()
+     *****************************************/
 
     /**
      * Compares the actual table in the database with its definition in the xml
@@ -3684,6 +3708,8 @@ public class DataBaseConnector {
         }
         return false;
     }
+
+    public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}
 
     /**
      * A class to parse xml files and make them accessible with an iterator

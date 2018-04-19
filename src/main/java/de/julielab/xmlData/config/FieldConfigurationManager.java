@@ -52,7 +52,7 @@ public class FieldConfigurationManager extends HashMap<String, FieldConfig> {
 	public FieldConfig get(Object key) {
 		if (null == key || StringUtils.isBlank(key.toString()))
 			throw new TableSchemaDoesNotExistException(
-					"No table schema name was given. A table schema must be specified in the configuration file. A predefined table schema from the default configuration or a custom definition may be used.");
+					"The name of the table schema to fetch was null.");
 
 		FieldConfig fieldConfig = super.get(key);
 		if (null == fieldConfig) {

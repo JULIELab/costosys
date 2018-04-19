@@ -89,8 +89,9 @@ public class HiddenConfig {
 					authentication.put(DBConnectionName, userAndPass);
 					// there should be an empty line as separator
 					if (br.readLine() == null) {
-						LOG.error("Your .dbcUser file has malformed content.");
-						throw new IOException();
+						String msg = "Your .dbcUser file has malformed content.";
+						LOG.error(msg);
+						throw new IOException("The CoStoSys credentials caching file at "+configFile+" file has malformed content.");
 					}
 				}
 			}

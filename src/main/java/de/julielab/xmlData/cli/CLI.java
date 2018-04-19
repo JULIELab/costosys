@@ -51,6 +51,8 @@ import de.julielab.xmlData.Constants;
 import de.julielab.xmlData.dataBase.DataBaseConnector;
 import de.julielab.xmlData.dataBase.SubsetStatus;
 
+import static de.julielab.xmlData.dataBase.DataBaseConnector.StatusElement.*;
+
 /**
  * Command line interface for interaction with a databases holding e.g. Medline
  * XML data.
@@ -286,7 +288,7 @@ public class CLI {
 						if (lc != null)
 							logMessage("table reset is restricted to rows with last component " + lc);
 						if (!np && !ne && lc == null) {
-							SubsetStatus status = dbc.status(subsetTableName);
+							SubsetStatus status = dbc.status(subsetTableName, EnumSet.of(IN_PROCESS, IS_PROCESSED, TOTAL));
 							long inProcess = status.inProcess;
 							long isProcessed = status.isProcessed;
 							long total = status.total;
@@ -443,7 +445,7 @@ public class CLI {
 				LOG.error("You must provide the name of a subset table to display its status.");
 				error = true;
 			} else {
-				SubsetStatus status = dbc.status(subsetTableName);
+				SubsetStatus status = dbc.status(subsetTableName, EnumSet.allOf(DataBaseConnector.StatusElement.class));
 				System.out.println(status);
 			}
 		} catch (TableSchemaDoesNotExistException e) {
