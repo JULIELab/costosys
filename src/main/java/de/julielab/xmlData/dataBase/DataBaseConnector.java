@@ -342,7 +342,6 @@ public class DataBaseConnector {
                 createSchema(dbConfig.getActiveDataPGSchema(), conn);
             stm.execute(String.format("SET search_path TO %s", dbConfig.getActivePGSchema()));
             stm.close();
-
         } catch (SQLException e) {
             LOG.error("Could not connect with " + dbURL);
             e.printStackTrace();
@@ -414,7 +413,7 @@ public class DataBaseConnector {
      * @param pid             - will be saved in the subset table
      * @return An ArrayList of pmids which have not yet been processed
      */
-    public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid) {
+    public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid) throws TableSchemaMismatchException {
         return retrieveAndMark(subsetTableName, readerComponent, hostName, pid, RETRIEVE_MARK_LIMIT, null);
     }
 
@@ -439,7 +438,7 @@ public class DataBaseConnector {
      * @see #retrieveAndMark(String, String, String, String, int, String)
      */
     public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid,
-                                          int limit, String order) {
+                                          int limit, String order) throws TableSchemaMismatchException {
         return retrieveAndMark(subsetTableName, activeTableSchema, readerComponent, hostName, pid, limit, order);
     }
 
@@ -475,8 +474,9 @@ public class DataBaseConnector {
      * @return An ArrayList of primary keys which have not yet been processed.
      */
     public List<Object[]> retrieveAndMark(String subsetTableName, String schemaName, String readerComponent,
-                                          String hostName, String pid, int limit, String order) {
-        List<Object[]> ids = new ArrayList<Object[]>(limit);
+                                          String hostName, String pid, int limit, String order) throws TableSchemaMismatchException {
+        checkTableDefinition(subsetTableName, schemaName);
+        List<Object[]> ids = new ArrayList<>(limit);
         String sql = null;
         Connection conn = null;
         boolean idsRetrieved = false;
@@ -3466,10 +3466,6 @@ public class DataBaseConnector {
         checkTableDefinition(tableName, activeTableSchema);
     }
 
-    /**************************
-     * Class for queryAll()
-     *****************************************/
-
     /**
      * Compares the actual table in the database with its definition in the xml
      * configuration</br>
@@ -3495,17 +3491,19 @@ public class DataBaseConnector {
         // dbcConfiguration specifies an "integer", it actually becomes an
         // "int4". This could be treated, for the moment
         // only the names will be checked.
-
+        String tableType;
         if (getReferencedTable(tableName) == null) { // dataTable, check all
+            tableType = "data";
             // columns
             actualColumns = new ArrayList<>(getTableDefinition(tableName));
             for (Map<String, String> m : fieldConfig.getFields())
                 // definedColumns.add(m.get("name") + " " + m.get("type"));
-                definedColumns.add(m.get("name"));
+                definedColumns.add(m.get(JulieXMLConstants.NAME));
 
-        } else { // normal table, check only pk-columns
+        } else { // subset table, check only pk-columns
+            tableType = "subset";
             for (Map<String, String> m : fieldConfig.getFields())
-                if (new Boolean(m.get("primaryKey")))
+                if (new Boolean(m.get(JulieXMLConstants.PRIMARY_KEY)))
                     // definedColumns.add(m.get("name") + " " + m.get("type"));
                     definedColumns.add(m.get("name"));
 
@@ -3542,11 +3540,15 @@ public class DataBaseConnector {
         }
         Collections.sort(definedColumns);
         Collections.sort(actualColumns);
-        if (!definedColumns.equals(actualColumns))
-            throw new TableSchemaMismatchException("The existing database table \"" + tableName + "\" has the following " +
+        if (!definedColumns.equals(actualColumns)) {
+
+            String columnType = tableType.equals("subset") ? "primary key " : "";
+            throw new TableSchemaMismatchException("The existing " + tableType + " table \"" + tableName + "\" has the following " +
+                    columnType +
                     "columns: \"" + StringUtils.join(actualColumns, " ") + "\". However, the CoStoSys table " +
-                    "schema \"" + schemaName + "\" that is used to operate on that table specifies a different set of columns:" +
-                    StringUtils.join(definedColumns, " "));
+                    "schema \"" + schemaName + "\" that is used to operate on that table specifies a different set of " + columnType + "columns:" +
+                    StringUtils.join(definedColumns, " ") + ". The active table schema is specified in the CoStoSys XML coniguration file.");
+        }
 
     }
 
