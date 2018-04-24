@@ -28,6 +28,7 @@ import de.julielab.xmlData.config.DBConfig;
 import de.julielab.xmlData.config.FieldConfig;
 import de.julielab.xmlData.config.FieldConfigurationManager;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
+import de.julielab.xmlData.dataBase.util.UnobtainableConnectionException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -352,11 +353,11 @@ public class DataBaseConnector {
                     HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
                     int totalConnections = poolProxy.getTotalConnections();
                     int idleConnections = poolProxy.getIdleConnections();
-                    int activeConncetions = poolProxy.getActiveConnections();
+                    int activeConnections = poolProxy.getActiveConnections();
                     int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
                     LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
                     LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
-                    LOG.trace("Pool {} has {} active connections", poolName, activeConncetions);
+                    LOG.trace("Pool {} has {} active connections", poolName, activeConnections);
                     LOG.trace("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
 
                 } catch (MalformedObjectNameException e) {
@@ -375,7 +376,16 @@ public class DataBaseConnector {
             stm.close();
         } catch (SQLException e) {
             LOG.error("Could not connect with " + dbURL);
-            e.printStackTrace();
+            throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
+                    "pool. This can have one of two causes: Firstly, the application might just use all connections " +
+                    "concurrently. Then, a higher number of maximum active database connections in the CoStoSys " +
+                    "configuration might help. This " +
+                    "number is currently set to " + config.getDatabaseConfig().getMaxConnections() + ". The other " +
+                    "possibility are programming errors where connections are retrieved but not closed. Closing " +
+                    "connections means to return them to the pool. It must always be made sure that connections are " +
+                    "closed when they are no longer required. If database iterators are used. i.e. subclasses of " +
+                    "DBCIterator, make sure to fully read the iterators. Otherwise, they might keep a permanent " +
+                    "connection to the database while waiting to be consumed.", e);
         }
         return conn;
     }

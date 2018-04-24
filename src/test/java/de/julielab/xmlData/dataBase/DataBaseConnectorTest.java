@@ -1,7 +1,6 @@
-package de.julielab.xmlData.dataRetrieval;
+package de.julielab.xmlData.dataBase;
 
 import de.julielab.xmlData.Constants;
-import de.julielab.xmlData.dataBase.DataBaseConnector;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;

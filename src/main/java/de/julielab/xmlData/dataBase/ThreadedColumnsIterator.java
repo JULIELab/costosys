@@ -12,9 +12,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.Exchanger;
 import java.util.function.Function;
 
@@ -30,6 +28,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
     // To query by PMID, uses two other threads
     public ThreadedColumnsIterator(DataBaseConnector dbc, List<String[]> keys, List<String> fields, String table, String schemaName) {
+        LOG.trace("Initializing iterator to read {} values from table {} for the columns {}", keys.size(), table, fields);
         this.dbc = dbc;
         backgroundThread = new ResToListThread(listExchanger, keys, fields, table, schemaName);
         update();
@@ -37,6 +36,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
     // To query all, uses only one other thread
     public ThreadedColumnsIterator(DataBaseConnector dbc, List<String> fields, String table) {
+        LOG.trace("Initializing iterator to read all values from table {} for the columns {}", table, fields);
         this.dbc = dbc;
         backgroundThread = new ListFromDBThread(listExchanger, fields, table);
         update();
@@ -48,6 +48,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
      * @author hellrich
      */
     private class ResToListThread extends Thread {
+        private final Logger log = LoggerFactory.getLogger(ResToListThread.class);
         private final List<String> fields;
         private Exchanger<List<Object[]>> listExchanger;
         private Exchanger<ResultSet> resExchanger = new Exchanger<ResultSet>();
@@ -60,6 +61,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             this.fields = fields;
             new FromDBThread(resExchanger, keys, this.fields, table, schemaName);
             try {
+                log.trace("Retrieving first ResultSet from the database thread");
                 currentRes = resExchanger.exchange(null);
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -73,6 +75,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                     .parseBoolean(dbc.getFieldConfiguration(dbc.getActiveTableSchema()).getField(fieldName).get(JulieXMLConstants.GZIP));
             try {
                 while (currentRes != null) {
+                    log.trace("ResultSet has more entries, reading the next");
                     currentList = new ArrayList<>();
                     while (currentRes.next()) {
                         Object[] columnValues = new Object[fields.size()];
@@ -84,8 +87,10 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                         }
                         currentList.add(columnValues);
                     }
-                    if (!currentList.isEmpty())
+                    if (!currentList.isEmpty()) {
+                        log.trace("Sending result list to top thread");
                         listExchanger.exchange(currentList);
+                    }
                     currentRes = resExchanger.exchange(null);
                 }
                 listExchanger.exchange(null); // stop signal
@@ -105,6 +110,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
      * @author hellrich
      */
     private class FromDBThread extends Thread {
+        private final Logger log = LoggerFactory.getLogger(FromDBThread.class);
         private Iterator<String[]> keyIter;
         private Exchanger<ResultSet> resExchanger;
         private String statement;
@@ -118,6 +124,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             this.resExchanger = resExchanger;
             this.fieldConfig = dbc.getFieldConfiguration(schemaName);
             statement = "SELECT " + StringUtils.join(fields, ",") + " FROM " + table + " WHERE ";
+            log.trace("Retrieving data for {} primary keys from the database with SQL statement: {}", keys.size(), statement);
             keyIter = keys.iterator();
             setDaemon(true);
             start();
@@ -127,6 +134,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             try {
                 while (keyIter.hasNext()) {
                     currentRes = getFromDB();
+                    log.trace("Sending a new ResultSet to the ResultSet reading thread");
                     resExchanger.exchange(currentRes);
                 }
                 resExchanger.exchange(null); // Indicates end
@@ -189,11 +197,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
      * @author hellrich
      */
     private class ListFromDBThread extends Thread {
+        private final Logger log = LoggerFactory.getLogger(ListFromDBThread.class);
         private final List<String> fields;
         private Exchanger<List<Object[]>> listExchanger;
         private List<Object[]> currentList;
         private String selectFrom;
-        private boolean hasNext;
         private ResultSet res;
         private Connection conn;
 
@@ -201,14 +209,14 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             this.listExchanger = listExchanger;
             this.fields = fields;
             selectFrom = String.format("SELECT %s FROM %s", StringUtils.join(fields, ","), table);
+            log.trace("Reading data from table {} with SQL: {}", table, selectFrom);
             try {
                 conn = dbc.getConn();
                 conn.setAutoCommit(false);// cursor doesn't work otherwise
                 Statement st = conn.createStatement();
+                log.trace("Setting fetch size to {}", dbc.getQueryBatchSize());
                 st.setFetchSize(dbc.getQueryBatchSize()); // cursor
                 res = st.executeQuery(selectFrom);
-                hasNext = res.next(); // never forget
-                updateCurrentList();
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -218,17 +226,14 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
         public void run() {
             try {
-                listExchanger.exchange(currentList);
-                while (hasNext) {
-                    updateCurrentList();
+                while (updateCurrentList()) {
+                    log.trace("Sending result list of size {} to top thread.", currentList.size());
                     listExchanger.exchange(currentList);
                 }
+                log.trace("No more results were retrieved from the ResultSet. Finishing retrieval.");
                 conn.setAutoCommit(true);
-                listExchanger.exchange(new ArrayList<>()); // Empty
-                // lists
-                // as
-                // stop
-                // signal
+                // null as stop signal
+                listExchanger.exchange(null);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } catch (SQLException e) {
@@ -242,14 +247,17 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             }
         }
 
-        private void updateCurrentList() {
+        private boolean updateCurrentList() {
             currentList = new ArrayList<>();
             Function<String, Boolean> unzip = fieldName -> Boolean
                     .parseBoolean(dbc.getFieldConfiguration(dbc.getActiveTableSchema()).getField(fieldName).get(JulieXMLConstants.GZIP));
             int i = 0;
             try {
-                while (hasNext && i < dbc.getQueryBatchSize()) {
-                    currentList = new ArrayList<>();
+                log.trace("Retrieving data from the ResultSet");
+                // res.next() progresses the cursor and must only be called if the new values are actually read.
+                // Thus, it must be the second operand of the boolean expression because it must not be evaluated if
+                // i < dbc.getQueryBatchSize() is false.
+                while (i < dbc.getQueryBatchSize() && res.next()) {
                     Object[] columnValues = new Object[fields.size()];
                     for (int j = 0; j < fields.size(); ++j) {
                         Object o = res.getObject(j + 1);
@@ -260,11 +268,12 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                     }
                     currentList.add(columnValues);
                     ++i;
-                    hasNext = res.next();
                 }
+                log.trace("Received {} data rows from the ResultSet", currentList.size());
             } catch (SQLException | IOException e) {
                 e.printStackTrace();
             }
+            return i > 0;
         }
     }
 }
