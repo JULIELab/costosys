@@ -15,7 +15,9 @@
 
 package de.julielab.xmlData.dataBase;
 
+import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
 import de.julielab.hiddenConfig.HiddenConfig;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
@@ -30,14 +32,19 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.management.JMX;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.ObjectName;
 import javax.sql.DataSource;
 import java.io.*;
+import java.lang.management.ManagementFactory;
 import java.sql.*;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Exchanger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -66,6 +73,10 @@ public class DataBaseConnector {
     @Deprecated
     public static final int META_IN_ARRAY = 2;
     /**
+     * This is the definition of subset tables except the primary key.
+     */
+    public static final LinkedHashMap<String, String> subsetColumns;
+    /**
      * Size of the batches used for data retrieval from the database, value is
      * optimized for xml-clobs in postgres on 2010 hardware.
      */
@@ -79,7 +90,6 @@ public class DataBaseConnector {
     private static final int commitBatchSize = 10000;
     private static final int RETRIEVE_MARK_LIMIT = 1000;
     private static final int ID_SUBLIST_SIZE = 1000;
-    private static final LinkedHashMap<String, String> subsetColumns;
     private static final Map<String, HikariDataSource> pools = new ConcurrentHashMap<>();
 
     /**
@@ -255,10 +265,6 @@ public class DataBaseConnector {
         return is;
     }
 
-    public void setQueryBatchSize(int queryBatchSize) {
-        this.queryBatchSize = queryBatchSize;
-    }
-
     public ConfigReader getConfig() {
         return config;
     }
@@ -318,20 +324,45 @@ public class DataBaseConnector {
         Connection conn = null;
         if (null == dataSource) {
             LOG.debug("Setting up connection pool data source");
-            HikariDataSource ds = pools.getOrDefault(dbURL, new HikariDataSource());
-            if (ds.isClosed())
-                ds = new HikariDataSource();
+            HikariConfig hikariConfig = new HikariConfig();
+            hikariConfig.setPoolName("costosys-"+System.nanoTime());
+            hikariConfig.setJdbcUrl(dbURL);
+            hikariConfig.setUsername(user);
+            hikariConfig.setPassword(password);
+            hikariConfig.setConnectionTestQuery("SELECT TRUE");
+            hikariConfig.setMaximumPoolSize(dbConfig.getMaxConnections());
+            // required to be able to get the number of idle connections, see below
+            hikariConfig.setRegisterMbeans(true);
+            HikariDataSource ds = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
+            if (ds.isClosed()) {
+                ds = new HikariDataSource(hikariConfig);
+            }
             pools.put(dbURL, ds);
-            ds.setJdbcUrl(dbURL);
-            ds.setUsername(user);
-            ds.setPassword(password);
-            ds.setConnectionTestQuery("SELECT TRUE");
-            ds.setMaximumPoolSize(dbConfig.getMaxConnections());
             dataSource = ds;
         }
 
         try {
             LOG.trace("Waiting for SQL connection to become free...");
+            if (LOG.isTraceEnabled()) {
+                // from https://github.com/brettwooldridge/HikariCP/wiki/MBean-(JMX)-Monitoring-and-Management
+                MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                try {
+                    String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
+                    ObjectName poolName = new ObjectName("com.zaxxer.hikari:type=Pool (" + poolNameStr + ")");
+                    HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
+                    int totalConnections = poolProxy.getTotalConnections();
+                    int idleConnections = poolProxy.getIdleConnections();
+                    int activeConncetions = poolProxy.getActiveConnections();
+                    int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
+                    LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
+                    LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
+                    LOG.trace("Pool {} has {} active connections", poolName, activeConncetions);
+                    LOG.trace("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
+
+                } catch (MalformedObjectNameException e) {
+                    e.printStackTrace();
+                }
+            }
             conn = dataSource.getConnection();
             // conn = DriverManager.getConnection(fullURI);
             LOG.trace("SQL connection obtained.");
@@ -388,12 +419,12 @@ public class DataBaseConnector {
         return activeTableSchema;
     }
 
-    /**************************************************************************
-     *************************** for DBReader ********************************
-     **************************************************************************/
-
     public void setActiveTableSchema(String schemaName) {
         this.activeTableSchema = schemaName;
+    }
+
+    public FieldConfig getActiveTableFieldConfiguration() {
+        return fieldConfigs.get(activeTableSchema);
     }
 
     /**
@@ -819,15 +850,7 @@ public class DataBaseConnector {
             // Lowercasing of the table name since case matters but postgres
             // does lowercase on table creation.
             ResultSet imported = conn.getMetaData().getImportedKeys("", pgSchema, tableName.toLowerCase());
-            // ReferencingTable.replaceFirst(".*?\\.", "") truncates a potential
-            // existing schema qualification. If we don't do this and the table
-            // name is qualified nothing will be found (dots in table names are
-            // allowed, thus there is no automatic normalization).
-            // TODO but the above assumes that the correct schema is included in
-            // the dbcConfiguration and thus we can forget about the schema
-            // qualification of the table name. But what if the qualification
-            // has been given with intention? If nothing is found without the
-            // qualification, it should be tried again with the qualification.
+
             if (imported.next()) {
                 String pkTableSchema = imported.getString(2);
                 String pkTableName = imported.getString(3);
@@ -1203,6 +1226,16 @@ public class DataBaseConnector {
         return effectiveDataTable;
     }
 
+    /**
+     * Follows the foreign-key specifications of the given table to the referenced table. This process is repeated until
+     * a non-subset table (a table for which {@link #isSubsetTable(String)} returns <code>false</code>) is encountered
+     * or a table without a foreign-key is found. If <code>referencingTable</code> has no foreign-key itself, null is returned
+     * since the referenced table does not exist.
+     *
+     * @param referencingTable The table to get the next referenced data table for, possibly across other subsets if <code>referencingTable</code> denotes a subset table..
+     * @return The found data table or <code>null</code>, if <code>referencingTable</code> is a data table itself.
+     * @throws SQLException If table meta data checking fails.
+     */
     public String getNextDataTable(String referencingTable) throws SQLException {
         String referencedTable = getReferencedTable(referencingTable);
         while (isSubsetTable(referencedTable)) {
@@ -1211,7 +1244,20 @@ public class DataBaseConnector {
         return referencedTable;
     }
 
+    /**
+     * <p>
+     * Checks if the given table is a subset table.
+     * </p>
+     * <p>A database table is identified to be a subset table if it exhibits all the column names that subsets
+     * have. Those are defined in {@link #subsetColumns}.</p>
+     *
+     * @param table The table to check for being a subset table.
+     * @return True, iff <code>table</code> denotes a subset table, false otherwise. The latter case includes the <code>table</code> parameter being <code>null</code>.
+     * @throws SQLException If table meta data checking fails.
+     */
     public boolean isSubsetTable(String table) throws SQLException {
+        if (table == null)
+            return false;
         try (Connection conn = getConn()) {
             String pgSchema = dbConfig.getActivePGSchema();
             String tableName = table;
@@ -1350,10 +1396,6 @@ public class DataBaseConnector {
         return exists;
     }
 
-    /**************************************************************************
-     ********************************* Data Import *****************************
-     **************************************************************************/
-
     /**
      * Tests if a table contains entries.
      *
@@ -1380,6 +1422,10 @@ public class DataBaseConnector {
         }
         return false;
     }
+
+    /**************************************************************************
+     ********************************* Data Import *****************************
+     **************************************************************************/
 
     /**
      * <p>
@@ -1598,11 +1644,6 @@ public class DataBaseConnector {
         initRandomSubset(size, subsetTable, supersetTable, activeTableSchema);
     }
 
-    // TODO: could be merged with defineSubsetWithWhereClause ?
-    // EF: But here the ID list is broken down into smaller lists for which the
-    // where clause is built. defineSubsetWithWhereClause isn't capable of such
-    // things. So my vote is to let it the current way (09.01.2012).
-
     /**
      * <p>
      * Selects <code>size</code> rows of the given super set table randomly and
@@ -1633,6 +1674,11 @@ public class DataBaseConnector {
             }
         }
     }
+
+    // TODO: could be merged with defineSubsetWithWhereClause ?
+    // EF: But here the ID list is broken down into smaller lists for which the
+    // where clause is built. defineSubsetWithWhereClause isn't capable of such
+    // things. So my vote is to let it the current way (09.01.2012).
 
     /**
      * Defines a subset by populating a subset table with primary keys from another
@@ -2332,21 +2378,6 @@ public class DataBaseConnector {
      * not yet in the table, it will be inserted instead.
      * </p>
      * <p>
-     * The input rows are expected to fit the table schema <code>schemaName</code>.
-     * </p>
-     *
-     * @param it
-     *            - an Iterator, yielding new or updated entries.
-     * @param tableName
-     *            - the updated table
-     */
-
-    /**
-     * <p>
-     * Updates a table with the entries yielded by the iterator. If the entries is
-     * not yet in the table, it will be inserted instead.
-     * </p>
-     * <p>
      * The input rows are expected to fit the active table schema.
      * </p>
      *
@@ -2356,6 +2387,21 @@ public class DataBaseConnector {
     public void updateFromRowIterator(Iterator<Map<String, Object>> it, String tableName) {
         updateFromRowIterator(it, tableName, null, true, activeTableSchema);
     }
+
+    /**
+     * <p>
+     * Updates a table with the entries yielded by the iterator. If the entries is
+     * not yet in the table, it will be inserted instead.
+     * </p>
+     * <p>
+     * The input rows are expected to fit the table schema <code>schemaName</code>.
+     * </p>
+     *
+     * @param it
+     *            - an Iterator, yielding new or updated entries.
+     * @param tableName
+     *            - the updated table
+     */
 
     /**
      * <p>
@@ -2689,27 +2735,6 @@ public class DataBaseConnector {
     }
 
     /**
-     * Used internal to commit the changes done by a connection in a seperate thread
-     * NOTE If a fast return from a commit is required, rather use Postgres
-     * asynchroneous commit
-     * (http://www.postgresql.org/docs/9.1/static/wal-async-commit.html)
-     */
-    // private void commit(final Connection conn) throws InterruptedException {
-    // if (commitThread != null)
-    // commitThread.join();
-    // commitThread = new Thread() {
-    // public void run() {
-    // try {
-    // conn.commit();
-    // } catch (SQLException e) {
-    // e.printStackTrace();
-    // }
-    // }
-    // };
-    // commitThread.start();
-    // }
-
-    /**
      * Constructs an SQL prepared statement for updating data rows in the database
      * table <code>tableName</code> according to the field schema definition.
      *
@@ -2748,6 +2773,27 @@ public class DataBaseConnector {
     }
 
     /**
+     * Used internal to commit the changes done by a connection in a seperate thread
+     * NOTE If a fast return from a commit is required, rather use Postgres
+     * asynchroneous commit
+     * (http://www.postgresql.org/docs/9.1/static/wal-async-commit.html)
+     */
+    // private void commit(final Connection conn) throws InterruptedException {
+    // if (commitThread != null)
+    // commitThread.join();
+    // commitThread = new Thread() {
+    // public void run() {
+    // try {
+    // conn.commit();
+    // } catch (SQLException e) {
+    // e.printStackTrace();
+    // }
+    // }
+    // };
+    // commitThread.start();
+    // }
+
+    /**
      * Alters an table, executing the supplied action
      *
      * @param action    - SQL fragment, specifiying how to alter the table
@@ -2771,16 +2817,6 @@ public class DataBaseConnector {
 
     }
 
-    /********************************
-     * Data Retrieval
-     ****************************************************************************************************/
-    /*
-     * Speed: (tested by repeated queries, using a pool-pc and 1000 as batchSize)
-     * queryAll() fetched 8.5 documents/ms (33min for whole db with 16.9*10e6
-     * documents) query(ids) fetched 9.3 documents/ms (9.3sec for 10e5 documents of
-     * a PMID sample)
-     */
-
     /**
      * @param ids
      * @param table
@@ -2791,6 +2827,16 @@ public class DataBaseConnector {
     public DBCIterator<byte[][]> queryWithTime(List<Object[]> ids, String table, String timestamp) {
         return queryWithTime(ids, table, timestamp, activeTableSchema);
     }
+
+    /********************************
+     * Data Retrieval
+     ****************************************************************************************************/
+    /*
+     * Speed: (tested by repeated queries, using a pool-pc and 1000 as batchSize)
+     * queryAll() fetched 8.5 documents/ms (33min for whole db with 16.9*10e6
+     * documents) query(ids) fetched 9.3 documents/ms (9.3sec for 10e5 documents of
+     * a PMID sample)
+     */
 
     /**
      * Returns an iterator over all rows in the table with matching id and a
@@ -2805,19 +2851,7 @@ public class DataBaseConnector {
     public DBCIterator<byte[][]> queryWithTime(List<Object[]> ids, String table, String timestamp, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
         String timestampWhere = fieldConfig.getTimestampFieldName() + " > " + timestamp;
-        return new ArrayIter(ids, table, timestampWhere, schemaName);
-    }
-
-    /**
-     * Returns an iterator over the XML column in the default data table. The
-     * Iterator will use threads, memory and a connection until all matches are
-     * returned.
-     *
-     * @return - results as an Iterator<byte[]>
-     */
-    // TODO: remove!
-    public Iterator<byte[]> queryAll() {
-        return new Iter(DEFAULT_FIELD, DEFAULT_TABLE);
+        return new ThreadedColumnsToRetrieveIterator(this, ids, table, timestampWhere, schemaName);
     }
 
     /**
@@ -2826,98 +2860,77 @@ public class DataBaseConnector {
      * connection until the iterator is empty, i.e. <code>hasNext()</code> returns
      * null!
      *
-     * @param field - field to return
-     * @param table - table to query
+     * @param fields - field to return
+     * @param table  - table to query
      * @return - results as an Iterator<byte[]>
      */
-    public Iterator<byte[]> queryAll(String field, String table) {
-        return new Iter(field, table);
+    public DBCIterator<Object[]> queryAll(List<String> fields, String table) {
+        return new ThreadedColumnsIterator(this, fields, table);
     }
 
-    // /**
-    // * Returns an iterator over all rows with matching PMID. The Iterator will
-    // * use memory and block a connection until all matches where returned!
-    // *
-    // * @param ids
-    // * - list of PMIDs
-    // * @return - results as an Iterator<byte[]>
-    // */
-    // public Iterator<byte[]> query(List<String> ids) {
-    // return new Iter(ids, DEFAULT_FIELD, DEFUALT_TABLE, DEFAULT_CONDITION);
-    // }
+    /**
+     * Returns the requested fields from the requested table. The iterator must be fully consumed or dangling threads
+     * and connections will remain, possible causing the application to wait forever for an open connection.
+     *
+     * @param table  The table to query.
+     * @param fields The names of the columns to retrieve values from.
+     * @return An iterator over the requested columns values.
+     */
+    public DBCIterator<Object[]> query(String table, List<String> fields) {
+        return new ThreadedColumnsIterator(this, fields, table);
+    }
 
     /**
+     * Returns the values the the column {@link #DEFAULT_FIELD} in the given table.
+     * The Iterator will use threads, memory and a connection until all matches were
+     * returned.
+     *
      * @param keys
      * @param table
      * @return
      * @see #query(List, String, String)
      */
-    public Iterator<byte[]> query(List<String[]> keys, String table) {
-        return new Iter(keys, DEFAULT_FIELD, table, activeTableSchema);
+    public DBCIterator<Object[]> query(List<String[]> keys, String table) {
+        return new ThreadedColumnsIterator(this, keys, Collections.singletonList(DEFAULT_FIELD), table, activeTableSchema);
     }
 
     /**
-     * Returns an iterator over all rows with matching primary key. The key can
-     * consist of multiple parts, which are defined in the xml-configuration. The
+     * Returns the values the the column {@link #DEFAULT_FIELD} in the given table. The
      * Iterator will use threads, memory and a connection until all matches were
-     * returned!
+     * returned.
      *
      * @param keys  - list of String[] containing the parts of the primary key
      * @param table - table to query
      * @return - results as an Iterator<byte[]>
      */
-    public Iterator<byte[]> query(List<String[]> keys, String table, String schemaName) {
-        return new Iter(keys, DEFAULT_FIELD, table, schemaName);
+    public DBCIterator<Object[]> query(List<String[]> keys, String table, String schemaName) {
+        return new ThreadedColumnsIterator(this, keys, Collections.singletonList(DEFAULT_FIELD), table, schemaName);
     }
 
-    // /**
-    // * Returns an iterator over all rows, field/table/condition can be
-    // * specified. The Iterator will use memory and block a connection until
-    // all
-    // * matches are returned!
-    // *
-    // * @param ids
-    // * - list of PMIDs
-    // * @param field
-    // * - name of the field to select
-    // * @param table
-    // * - name of the table to select from
-    // * @param condition
-    // * - name of the condition for the WHERE-clause
-    // * @return - results as an Iterator<byte[]>
-    // */
-    // public Iterator<byte[]> query(List<String> ids, String field, String
-    // table,
-    // String condition) {
-    // return new Iter(ids, field, table, condition);
-    // }
-
     /**
+     * Retrieves row values of <code>table</code> from the database. The returned columns are those
+     * that are configuration to be retrieved in the active table schema.
+     *
      * @param ids
      * @param table
      * @return
-     * @see #queryIDAndXML(List, String, String)
+     * @see #retrieveColumnsByTableSchema(List, String, String)
      */
-    public DBCIterator<byte[][]> queryIDAndXML(List<Object[]> ids, String table) {
-        return queryIDAndXML(ids, table, activeTableSchema);
+    public DBCIterator<byte[][]> retrieveColumnsByTableSchema(List<Object[]> ids, String table) {
+        return retrieveColumnsByTableSchema(ids, table, activeTableSchema);
     }
 
     /**
-     * TODO This description is deprecated, write a new, correct version (all fields
-     * to be retrieved are returned actually).
-     * <p>
-     * Returns an iterator over all rows with matching pmid, containing PMID and XML
-     * as byte[]. The Iterator will use memory and block a connection until all
-     * matches are returned!
+     * Retrieves row values of <code>table</code> from the database. The returned columns are those
+     * that are configuration to be retrieved in the table schema with name <code>schemaName</code>.
      *
-     * @param ids   - list of PMIDs
-     * @param table - name of the table to select from
-     * @return - byte[][], containing pmid byte[] as [0] and xml byte[] as [1]
+     * @param ids
+     * @param table
+     * @param schemaName
+     * @return
      */
-    // TODO the name is deprecated; in fact, all fields with "retrieve=true" are
-    // returned in the byte[][]
-    public DBCIterator<byte[][]> queryIDAndXML(List<Object[]> ids, String table, String schemaName) {
-        return new ArrayIter(ids, table, schemaName);
+    public DBCIterator<byte[][]> retrieveColumnsByTableSchema(List<Object[]> ids, String table, String schemaName) {
+        return new ThreadedColumnsToRetrieveIterator(this, ids, table, schemaName);
     }
 
     /**
@@ -2930,8 +2943,8 @@ public class DataBaseConnector {
      * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
      * @return The joined data from the requested tables.
      */
-    public DBCIterator<byte[][]> queryIDAndXML(List<Object[]> ids, String[] tables, String[] schemaNames) {
-        return new ArrayIter(ids, tables, schemaNames);
+    public DBCIterator<byte[][]> retrieveColumnsByTableSchema(List<Object[]> ids, String[] tables, String[] schemaNames) {
+        return new ThreadedColumnsToRetrieveIterator(this, ids, tables, schemaNames);
     }
 
     /**
@@ -3089,6 +3102,14 @@ public class DataBaseConnector {
         return querySubset(tableName, null, limitParam, 0, activeTableSchema);
     }
 
+    public int getQueryBatchSize() {
+        return queryBatchSize;
+    }
+
+    public void setQueryBatchSize(int queryBatchSize) {
+        this.queryBatchSize = queryBatchSize;
+    }
+
     /**
      * <p>
      * Retrieves XML field values in the data table referenced by the subset table
@@ -3163,6 +3184,7 @@ public class DataBaseConnector {
             // cursor over all IDs in the set.
             final ResultSet outerKeyRS = stmt
                     .executeQuery("SELECT (" + fieldConfig.getPrimaryKeyString() + ") FROM " + tableName);
+            final DataBaseConnector dbc = this;
 
             DBCIterator<byte[][]> it = new DBCIterator<byte[][]>() {
 
@@ -3190,9 +3212,9 @@ public class DataBaseConnector {
                                 ++currentBatchSize;
                             }
                             if (whereClause != null)
-                                xmlIt = new ArrayIter(ids, dataTable, whereClause, schemaName);
+                                xmlIt = new ThreadedColumnsToRetrieveIterator(dbc, ids, dataTable, whereClause, schemaName);
                             else
-                                xmlIt = new ArrayIter(ids, dataTable, schemaName);
+                                xmlIt = new ThreadedColumnsToRetrieveIterator(dbc, ids, dataTable, schemaName);
 
                             boolean xmlItHasNext = xmlIt.hasNext();
                             if (!xmlItHasNext)
@@ -3223,7 +3245,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-                    ((ArrayIter) xmlIt).close();
+                    ((ThreadedColumnsToRetrieveIterator) xmlIt).close();
                     try {
                         if (!conn.isClosed()) {
                             conn.close();
@@ -3266,12 +3288,13 @@ public class DataBaseConnector {
 
     /**
      * Returns the row count of the requested table.
+     *
      * @param tableName The table to count the rows of.
      * @return The table row count.
      */
     public long getNumRows(String tableName) {
         try (Connection conn = getConn()) {
-            String sql = String.format("SELECT num(1) as %s FROM %s", Constants.TOTAL, tableName);
+            String sql = String.format("SELECT sum(1) as %s FROM %s", Constants.TOTAL, tableName);
             ResultSet resultSet = conn.createStatement().executeQuery(sql);
             if (resultSet.next()) {
                 return resultSet.getLong(Constants.TOTAL);
@@ -3652,6 +3675,13 @@ public class DataBaseConnector {
         return pkIndices;
     }
 
+    public void checkTableSchemaCompatibility(String referenceSchema, String... schemaNames) throws TableSchemaMismatchException {
+        String[] schemas = new String[schemaNames.length + 1];
+        schemas[0] = referenceSchema;
+        System.arraycopy(schemaNames, 0, schemas, 1, schemaNames.length);
+        checkTableSchemaCompatibility(schemas);
+    }
+
     public void checkTableSchemaCompatibility(String... schemaNames) throws TableSchemaMismatchException {
         if (null == schemaNames || schemaNames.length == 0) {
             LOG.warn("No table schema names were passed - nothing to check.");
@@ -3689,6 +3719,7 @@ public class DataBaseConnector {
     }
 
     public void close() {
+        LOG.debug("Shutting down DataBaseConnector, closing data source.");
         if (dataSource instanceof HikariDataSource)
             ((HikariDataSource) dataSource).close();
     }
@@ -3709,6 +3740,78 @@ public class DataBaseConnector {
                 }
         }
         return false;
+    }
+
+    /**
+     * Adds an auto-generated field configuration that exhibits the given primary key and all the fields required to
+     * store XMI document data (not annotations) in a database table. The additional fields are
+     * <ol>
+     * <li>xmi</li>
+     * <li>max_xmi_id</li>
+     * <li>sofa_mapping</li>
+     * </ol>
+     * and are required for the storage of XMI annotation graph segments stored in other tables. The schema created with
+     * this method is to be used for the base documents that include the document text. To get a schema with a specific
+     * primary that stores annotation data, see {@link #addXmiAnnotationFieldConfiguration(List, boolean)}.
+     * This method is used by the Jena Document Information
+     * System (JeDIS) components jcore-xmi-db-reader and jcore-xmi-db-consumer.
+     *
+     * @param primaryKey The document primary key for which an base document XMI segmentation table schema should be created.
+     * @param doGzip     Whether the XMI data should be gzipped in the table.
+     * @return The created field configuration.
+     */
+    public synchronized FieldConfig addXmiTextFieldConfiguration(List<Map<String, String>> primaryKey, boolean doGzip) {
+        List<String> pkNames = primaryKey.stream().map(map -> map.get(JulieXMLConstants.NAME)).collect(Collectors.toList());
+        String fieldConfigName = StringUtils.join(pkNames, "-") + "-xmi-text-autogenerated";
+        FieldConfig ret;
+        if (!fieldConfigs.containsKey(fieldConfigName)) {
+            List<Map<String, String>> fields = new ArrayList<>(primaryKey);
+            FieldConfig xmiConfig = fieldConfigs.get(doGzip ? "xmi_text_gzip" : "xmi_text");
+            HashSet<Integer> xmiConfigPkIndices = new HashSet<>(xmiConfig.getPrimaryKeyFieldNumbers());
+            // Add those fields to the new configuration that are not the primary key fields
+            IntStream.range(0, xmiConfig.getFields().size()).
+                    filter(i -> !xmiConfigPkIndices.contains(i)).
+                    mapToObj(i -> xmiConfig.getFields().get(i)).
+                    forEach(fields::add);
+            ret = new FieldConfig(fields, "", fieldConfigName);
+        } else {
+            ret = fieldConfigs.get(fieldConfigs.get(fieldConfigName));
+        }
+        return ret;
+    }
+
+    /**
+     * Adds an auto-generated field configuration that exhibits the given primary key and all the fields required to
+     * store XMI annotation data (not base documents) in database tables. The only field besides the primary key is
+     * <code>xmi</code> and will store the actual XMI annotation data. This table schema
+     * is used for the storage of XMI annotation graph segments. Those segments will then correspond to
+     * UIMA annotation types that are stored in tables of their own. A table schema to store the base document
+     * is created by {@link #addXmiTextFieldConfiguration(List, boolean)}.
+     * This method is used by the Jena Document Information
+     * System (JeDIS) components jcore-xmi-db-reader and jcore-xmi-db-consumer.
+     *
+     * @param primaryKey The document primary key for which an base document XMI segmentation table schema should be created.
+     * @param doGzip     Whether the XMI data should be gzipped in the table.
+     * @return The created field configuration.
+     */
+    public synchronized FieldConfig addXmiAnnotationFieldConfiguration(List<Map<String, String>> primaryKey, boolean doGzip) {
+        List<String> pkNames = primaryKey.stream().map(map -> map.get(JulieXMLConstants.NAME)).collect(Collectors.toList());
+        String fieldConfigName = StringUtils.join(pkNames, "-") + "-xmi-annotations-autogenerated";
+        FieldConfig ret;
+        if (!fieldConfigs.containsKey(fieldConfigName)) {
+            List<Map<String, String>> fields = new ArrayList<>(primaryKey);
+            FieldConfig xmiConfig = fieldConfigs.get(doGzip ? "xmi_annotation_gzip" : "xmi_annotation");
+            HashSet<Integer> xmiConfigPkIndices = new HashSet<>(xmiConfig.getPrimaryKeyFieldNumbers());
+            // Add those fields to the new configuration that are not the primary key fields
+            IntStream.range(0, xmiConfig.getFields().size()).
+                    filter(i -> !xmiConfigPkIndices.contains(i)).
+                    mapToObj(i -> xmiConfig.getFields().get(i)).
+                    forEach(fields::add);
+            ret = new FieldConfig(fields, "", fieldConfigName);
+        } else {
+            ret = fieldConfigs.get(fieldConfigs.get(fieldConfigName));
+        }
+        return ret;
     }
 
     public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}
@@ -3750,581 +3853,5 @@ public class DataBaseConnector {
 
         }
 
-    }
-
-    /**
-     * An iterator that returns documents stored in the database identified by the
-     * primary keys delivered in a list upon creation of the iterator. The returned
-     * data corresponds to the table schema also given at iterator creation.<br>
-     * The iterator employs two threads to retrieve new documents from the database
-     * while other documents, fetched before, can be processed concurrently. The
-     * idea is that the database can work in parallel to the program working with
-     * the retrieved documents.
-     *
-     * @author hellrich
-     */
-    private class ArrayIter extends DBCThreadedIterator<byte[][]> {
-        // To query by PMID, uses two other threads
-        public ArrayIter(List<Object[]> ids, String table, String schemaName) {
-            String[] tables = new String[1];
-            String[] schemaNames = new String[1];
-            tables[0] = table;
-            schemaNames[0] = schemaName;
-            backgroundThread = new ArrayResToListThread(listExchanger, ids, tables, null, schemaNames);
-            update();
-        }
-
-        // To query by PMID, uses two other threads
-        public ArrayIter(List<Object[]> ids, String table, String whereClause, String schemaName) {
-            String[] tables = new String[1];
-            String[] schemaNames = new String[1];
-            tables[0] = table;
-            schemaNames[0] = schemaName;
-            backgroundThread = new ArrayResToListThread(listExchanger, ids, tables, whereClause, schemaNames);
-            update();
-        }
-
-        /**
-         * Retrieves data from the database over multiple tables. All tables will be joined on the given IDs.
-         * The columns to be retrieved for each table is determined by its table schema. For this purpose, the
-         * <code>tables</code> and <code>schemaName</code> arrays are required to be parallel.
-         *
-         * @param ids         A list of primary keys identifying the items to retrieve.
-         * @param tables      The tables from which the items should be retrieved that are identified by <code>ids</code>.
-         * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
-         * @return The joined data from the requested tables.
-         */
-        public ArrayIter(List<Object[]> ids, String[] tables, String[] schemaNames) {
-            backgroundThread = new ArrayResToListThread(listExchanger, ids, tables, null, schemaNames);
-            update();
-        }
-
-        /*
-         * (non-Javadoc)
-         *
-         * @see de.julielab.xmlData.dataBase.DBCThreadedIterator#destroy()
-         */
-        @Override
-        public void close() {
-            super.close();
-            ((ArrayResToListThread) backgroundThread).end();
-        }
-
-    }
-
-    /**
-     * This class converts a <tt>ResultSet</tt>, retrieved from the database, into a
-     * list, that is then returned.<br>
-     * This class is a <tt>Thread</tt> and serves as an intermediate layer between
-     * the program that uses the resulting list and another thread that is doing the
-     * actual database querying. This class has to {@link Exchanger}: One
-     * <tt>Exchanger</tt> for the result list that is returned to the caller.
-     * Another <tt>Exchanger</tt> is used to retrieve database results in the form
-     * of {@link ResultSet} instances from the thread querying the database. In
-     * between, this class converts the <tt>ResultSet</tt> to a <tt>List</tt>.
-     *
-     * @author hellrich
-     */
-    private class ArrayResToListThread extends Thread {
-        private final ArrayFromDBThread arrayFromDBThread;
-        private Exchanger<List<byte[][]>> listExchanger;
-        private Exchanger<ResultSet> resExchanger = new Exchanger<ResultSet>();
-        private ResultSet currentRes;
-        private ArrayList<byte[][]> currentList;
-        private String[] table;
-        private String[] schemaName;
-        private boolean joined = false;
-        private volatile boolean end = false;
-
-        ArrayResToListThread(Exchanger<List<byte[][]>> listExchanger, List<Object[]> keyList, String[] table,
-                             String whereClause, String[] schemaName) {
-            this.listExchanger = listExchanger;
-            this.table = table;
-            this.schemaName = schemaName;
-            if (table.length > 1 && schemaName.length > 1) {
-                this.joined = true;
-            }
-            // start the thread that is actually querying the database
-            arrayFromDBThread = new ArrayFromDBThread(resExchanger, keyList, table, whereClause, schemaName);
-            try {
-                // retrieve the first result without yet running the thread;
-                // when we have the result, we begin to create the result list
-                // out of the first retrieved ResultSet and return the list,
-                // then get the next results and so on...
-                currentRes = resExchanger.exchange(null);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            setDaemon(true);
-            start();
-        }
-
-        @SuppressWarnings("unchecked")
-        public void run() {
-            List<Object> numColumnsAndFields = getNumColumnsAndFields(joined, table, schemaName);
-            int numColumns = (Integer) numColumnsAndFields.get(0);
-            List<Map<String, String>> fields = (List<Map<String, String>>) numColumnsAndFields.get(1);
-            int i = 0;
-            byte[][] retrievedData = null;
-            try {
-                while (currentRes != null && !end) {
-                    currentList = new ArrayList<byte[][]>();
-                    // convert the current database ResultSet into a list.
-                    while (currentRes.next()) {
-                        retrievedData = new byte[numColumns][];
-                        for (i = 0; i < retrievedData.length; i++) {
-                            retrievedData[i] = currentRes.getBytes(i + 1);
-                            if (Boolean.parseBoolean(fields.get(i).get(JulieXMLConstants.GZIP))
-                                    && retrievedData[i] != null)
-                                retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
-                        }
-                        currentList.add(retrievedData);
-                    } // end ResultSet to List conversion
-                    // Offer the created result list to the calling program;
-                    // as soon as the result has been given away, we
-                    // continue fetching more documents from the database
-                    // below, allowing the calling program to process the
-                    // current result and already fetching the next
-                    if (!currentList.isEmpty())
-                        listExchanger.exchange(currentList);
-                    // Get the next ResultSet from the database
-                    currentRes = resExchanger.exchange(null);
-                }
-                listExchanger.exchange(null); // stop signal
-            } catch (InterruptedException | SQLException | IOException e) {
-                LOG.error(
-                        "Exception occured while reading " + "data from result set, index {}. "
-                                + "Corresponding field in schema definition is: {}. Read data was: \"{}\"",
-                        new Object[]{i + 1, fields.get(i), new String(retrievedData[i])});
-                e.printStackTrace();
-            } catch (NullPointerException e) {
-                LOG.debug("NPE on: Index {}, field {}, data {}",
-                        new Object[]{i, fields.get(i), retrievedData != null ? retrievedData[i] : null});
-                throw e;
-            }
-        }
-
-        /**
-         * Must be called when the thread is no longer required. Otherwise, it will
-         * continue querying the database.
-         */
-        public void end() {
-            arrayFromDBThread.end();
-            end = true;
-        }
-    }
-
-    /**
-     * This class is last <tt>Thread</tt> in the
-     * <code>Iterator - ResultSet to List converter - ResultSet from database retriever</code>
-     * chain and thus is the class doing the database querying. <br>
-     * Upon creation, this class starts itself as a demon <tt>Thread</tt>. It
-     * queries {@link DataBaseConnector#queryBatchSize} IDs and offers the
-     * <tt>ResultSet</tt> in an {@link Exchanger} for the intermediate
-     * <tt>Thread</tt>.
-     *
-     * @author hellrich
-     */
-    private class ArrayFromDBThread extends Thread {
-        private Iterator<Object[]> keyIter;
-        private Exchanger<ResultSet> resExchanger;
-        private StringBuilder queryBuilder;
-        private ResultSet currentRes;
-        private String selectFrom;
-        private Connection conn;
-        private String whereClause = null;
-        private FieldConfig fieldConfig;
-        private volatile boolean end;
-        private boolean joined = false;
-        private String dataTable;
-        private String dataSchema;
-
-        public ArrayFromDBThread(Exchanger<ResultSet> resExchanger, List<Object[]> keyList, String[] table,
-                                 String whereClause, String[] schemaName) {
-            this.conn = getConn();
-            this.resExchanger = resExchanger;
-            keyIter = keyList.iterator();
-            this.queryBuilder = new StringBuilder();
-            this.whereClause = whereClause;
-            this.dataTable = table[0];
-            this.dataSchema = schemaName[0];
-            if (table.length > 1 && schemaName.length > 1) {
-                this.joined = true;
-            }
-            buildSelectFrom(table, schemaName);
-            setDaemon(true);
-            start();
-        }
-
-        /**
-         * Create the basic SQL query structure used to query documents from the
-         * database.
-         *
-         * @param table
-         * @param schemaName
-         */
-        private void buildSelectFrom(String[] table, String[] schemaName) {
-            // Build SELECT if there is only one table.
-            if (!joined) {
-                fieldConfig = fieldConfigs.get(dataSchema);
-                selectFrom = "SELECT " + StringUtils.join(fieldConfig.getColumnsToRetrieve(), ",") + " FROM "
-                        + dataTable + " WHERE ";
-                // Build SELECT if multiple tables will be joined.
-                // This will be in the form
-                // 'SELECT dataTable.pmid, otherTable1.data, otherTable2.data
-                // FROM dataTable
-                // LEFT JOIN otherTable1 ON dataTable.pmid=otherTable1.pmid
-                // LEFT JOIN otherTable2 ON dataTable.pmid=othertable2.pmid
-                // WHERE (dataTable.pmid=1) OR (dataTable.pmid=2) OR ...'
-            } else {
-                String[] primaryKey = null;
-                ArrayList<String> select = new ArrayList<String>();
-                ArrayList<String> leftJoin = new ArrayList<String>();
-
-                for (int i = 0; i < table.length; i++) {
-                    fieldConfig = fieldConfigs.get(schemaName[i]);
-                    String[] columnsToRetrieve = fieldConfig.getColumnsToRetrieve();
-                    for (int j = 0; j < columnsToRetrieve.length; j++) {
-                        String column = table[i] + "." + columnsToRetrieve[j];
-                        select.add(column);
-                    }
-                    if (i == 0) {
-                        // Get the names of the primary keys once, since they
-                        // should be identical for all tables.
-                        primaryKey = fieldConfig.getPrimaryKey();
-                    } else {
-                        String primaryKeyMatch = "";
-                        for (int j = 0; j < primaryKey.length; j++) {
-                            primaryKeyMatch = table[0] + "." + primaryKey[j] + "=" + table[i] + "." + primaryKey[j];
-                            if (!(j == primaryKey.length - 1))
-                                primaryKeyMatch = primaryKeyMatch + " AND ";
-                        }
-                        String join = "LEFT JOIN " + table[i] + " ON " + primaryKeyMatch;
-                        leftJoin.add(join);
-                    }
-                }
-                selectFrom = "SELECT " + StringUtils.join(select, ",") + " FROM " + table[0] + " "
-                        + StringUtils.join(leftJoin, " ") + " WHERE ";
-                LOG.trace("Querying data via SQL: {}", selectFrom);
-            }
-        }
-
-        /**
-         * Fetches results as long as there are unprocessed documents in the given
-         * subset table.
-         */
-        public void run() {
-            try {
-                while (keyIter.hasNext() && !end) {
-                    currentRes = getFromDB();
-                    resExchanger.exchange(currentRes);
-                }
-                resExchanger.exchange(null); // Indicates end
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } finally {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        /**
-         * Builds the final SQL query specifying the exact primary keys for retrieval,
-         * performs the actual query and returns the respective <tt>ResultSet</tt>
-         *
-         * @return
-         */
-        private ResultSet getFromDB() {
-            ResultSet res = null;
-            String sql = null;
-            try {
-                queryBuilder.delete(0, queryBuilder.capacity());
-                Statement stmt = conn.createStatement();
-                List<String> pkConjunction = new ArrayList<String>();
-                for (int i = 0; keyIter.hasNext() && i < queryBatchSize; ++i) {
-                    // get the next row of primary key values, e.g.
-                    //
-                    // pmid | systemID
-                    // --------------------
-                    // 1564 | FSU <--- this is stored in "keys"
-                    Object[] keys = keyIter.next();
-                    String[] nameValuePairs;
-                    nameValuePairs = new String[keys.length];
-                    // build an array of pairs like
-                    // ["pmid = 1563", "systemID = FSU"]
-                    if (!joined) {
-                        for (int j = 0; j < keys.length; ++j) {
-                            String fieldName = fieldConfig.getPrimaryKey()[j];
-                            nameValuePairs[j] = String.format("%s = '%s'", fieldName, keys[j]);
-                        }
-                    } else {
-                        for (int j = 0; j < keys.length; ++j) {
-                            String fieldName = fieldConfig.getPrimaryKey()[j];
-                            nameValuePairs[j] = String.format("%s = '%s'", dataTable + "." + fieldName, keys[j]);
-                        }
-                    }
-                    // make a conjunction of the name value pairs:
-                    // "(pmid = 1563 AND systemID = FSU)"
-                    pkConjunction.add("(" + StringUtils.join(nameValuePairs, " AND ") + ")");
-                }
-                queryBuilder.append(selectFrom);
-                queryBuilder.append("(");
-                queryBuilder.append(StringUtils.join(pkConjunction, " OR "));
-                queryBuilder.append(")");
-                if (whereClause != null)
-                    queryBuilder.append(" AND " + whereClause);
-                sql = queryBuilder.toString();
-                LOG.trace("Fetching data with command \"{}\"", sql);
-                res = stmt.executeQuery(sql);
-            } catch (SQLException e) {
-                e.printStackTrace();
-                LOG.error("SQL: " + sql);
-            }
-            return res;
-        }
-
-        public void end() {
-            // The connection is closed automatically when the thread ends, see
-            // the run() method.
-            end = true;
-        }
-
-    }
-
-    /**
-     * The Iterator for byte[]
-     *
-     * @author hellrich
-     */
-    private class Iter extends DBCThreadedIterator<byte[]> {
-        // To query by PMID, uses two other threads
-        public Iter(List<String[]> keys, String field, String table, String schemaName) {
-            backgroundThread = new ResToListThread(listExchanger, keys, field, table, schemaName);
-            update();
-        }
-
-        // To query all, uses only one other thread
-        public Iter(String field, String table) {
-            backgroundThread = new ListFromDBThread(listExchanger, field, table);
-            update();
-        }
-    }
-
-    /**
-     * A second thread, making a list out of ResultSets
-     *
-     * @author hellrich
-     */
-    private class ResToListThread extends Thread {
-        private final String field;
-        private Exchanger<List<byte[]>> listExchanger;
-        private Exchanger<ResultSet> resExchanger = new Exchanger<ResultSet>();
-        private ResultSet currentRes;
-        private ArrayList<byte[]> currentList;
-
-        ResToListThread(Exchanger<List<byte[]>> listExchanger, List<String[]> keys, String field, String table,
-                        String schemaName) {
-            this.listExchanger = listExchanger;
-            this.field = field;
-            new FromDBThread(resExchanger, keys, field, table, schemaName);
-            try {
-                currentRes = resExchanger.exchange(null);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            setDaemon(true);
-            start();
-        }
-
-        public void run() {
-            boolean doUnGzip = Boolean
-                    .parseBoolean(fieldConfigs.get(activeTableSchema).getField(field).get(JulieXMLConstants.GZIP));
-            try {
-                while (currentRes != null) {
-                    currentList = new ArrayList<byte[]>();
-                    while (currentRes.next()) {
-                        byte[] bytes = currentRes.getBytes(1);
-                        if (doUnGzip)
-                            bytes = JulieXMLTools.unGzipData(bytes);
-                        currentList.add(bytes);
-                    }
-                    if (!currentList.isEmpty())
-                        listExchanger.exchange(currentList);
-                    currentRes = resExchanger.exchange(null);
-                }
-                listExchanger.exchange(null); // stop signal
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    /**
-     * A third thread, querying the database for ResultSets
-     *
-     * @author hellrich
-     */
-    private class FromDBThread extends Thread {
-        private Iterator<String[]> keyIter;
-        private Exchanger<ResultSet> resExchanger;
-        private String statement;
-        private ResultSet currentRes;
-        private Connection conn;
-        private FieldConfig fieldConfig;
-
-        public FromDBThread(Exchanger<ResultSet> resExchanger, List<String[]> keys, String field, String table,
-                            String schemaName) {
-            this.conn = getConn();
-            this.resExchanger = resExchanger;
-            this.fieldConfig = fieldConfigs.get(schemaName);
-            statement = "SELECT " + field + " FROM " + table + " WHERE ";
-            keyIter = keys.iterator();
-            setDaemon(true);
-            start();
-        }
-
-        public void run() {
-            try {
-                while (keyIter.hasNext()) {
-                    currentRes = getFromDB();
-                    resExchanger.exchange(currentRes);
-                }
-                resExchanger.exchange(null); // Indicates end
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } finally {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        private ResultSet getFromDB() {
-            ResultSet res = null;
-            StringBuilder sql = new StringBuilder(statement);
-            Object[] values = null;
-            try {
-                Statement st = conn.createStatement();
-                String[] pks = fieldConfig.getPrimaryKey();
-
-                int i = 0;
-                while (keyIter.hasNext() && i < queryBatchSize) {
-                    values = keyIter.next();
-                    for (int j = 0; j < pks.length; ++j) {
-                        if (fieldConfig.isOfStringType(pks[j]))
-                            sql.append(pks[j]).append("=\'").append(values[j]).append("\'");
-                        else
-                            sql.append(pks[j]).append("=").append(values[j]);
-                        if (j < pks.length - 1)
-                            sql.append(" AND ");
-                    }
-                    sql.append(" OR ");
-                    ++i;
-                }
-                sql.delete(sql.length() - 4, sql.length()); // Remove trailing
-                // " OR "
-                res = st.executeQuery(sql.toString());
-            } catch (SQLException e) {
-                e.printStackTrace();
-                System.err.println(sql.toString());
-            } catch (ArrayIndexOutOfBoundsException e) {
-                LOG.error("Configuration file and query are incompatible.");
-                String wrongLine = "";
-                if (values != null)
-                    for (int i = 0; i < values.length; ++i)
-                        wrongLine += values[i];
-                LOG.error("Error in line beginning with: " + wrongLine);
-            }
-            return res;
-        }
-
-    }
-
-    /**
-     * Variant, a thread querying the whole database for ResultSets, returning all
-     * entries (as lists) to the iterator (replaces threads 2 and 3)
-     *
-     * @author hellrich
-     */
-    private class ListFromDBThread extends Thread {
-        private Exchanger<List<byte[]>> listExchanger;
-        private ArrayList<byte[]> currentList;
-        private String selectFrom;
-        private boolean hasNext;
-        private ResultSet res;
-        private Connection conn;
-        private boolean doUnGzip;
-
-        public ListFromDBThread(Exchanger<List<byte[]>> listExchanger, String field, String table) {
-            this.listExchanger = listExchanger;
-            selectFrom = String.format("SELECT %s FROM %s", field, table);
-            doUnGzip = Boolean
-                    .parseBoolean(fieldConfigs.get(activeTableSchema).getField(field).get(JulieXMLConstants.GZIP));
-            try {
-                conn = getConn();
-                conn.setAutoCommit(false);// cursor doesn't work otherwise
-                Statement st = conn.createStatement();
-                st.setFetchSize(queryBatchSize); // cursor
-                res = st.executeQuery(selectFrom);
-                hasNext = res.next(); // never forget
-                updateCurrentList();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-            setDaemon(true);
-            start();
-        }
-
-        public void run() {
-            try {
-                listExchanger.exchange(currentList);
-                while (hasNext) {
-                    updateCurrentList();
-                    listExchanger.exchange(currentList);
-                }
-                conn.setAutoCommit(true);
-                listExchanger.exchange(new ArrayList<byte[]>()); // Empty
-                // lists
-                // as
-                // stop
-                // signal
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            } finally {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        private void updateCurrentList() {
-            currentList = new ArrayList<byte[]>();
-            int i = 0;
-            try {
-                while (hasNext && i < queryBatchSize) {
-                    byte[] bytes = res.getBytes(1);
-                    if (doUnGzip)
-                        bytes = JulieXMLTools.unGzipData(bytes);
-                    currentList.add(bytes);
-                    ++i;
-                    hasNext = res.next();
-                }
-            } catch (SQLException | IOException e) {
-                e.printStackTrace();
-            }
-        }
     }
 }

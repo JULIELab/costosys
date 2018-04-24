@@ -673,7 +673,7 @@ public class CLI {
 					if (!keysExplicitlyGiven) {
 						it = dbc.querySubset(tableName, qo.whereClause, limit, numberRefHops, tableSchema);
 					} else if (keys.size() > 0)
-						it = dbc.queryIDAndXML(keys, tableName);
+						it = dbc.retrieveColumnsByTableSchema(keys, tableName);
 					else
 						throw new IllegalStateException(
 								"No query keys have been explicitly given (e.g. in a file) nor should the whole table be queried.");

@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -266,16 +267,16 @@ public class FieldConfig extends ConfigBase {
 	 */
 	public String[] getPrimaryKey() {
 		if (primaryKey == null) {
-			List<String> pkColumnNames = new ArrayList<String>();
-			for (Map<String, String> field : fields) {
-				if (Boolean.parseBoolean(field.get(JulieXMLConstants.PRIMARY_KEY)))
-					pkColumnNames.add(field.get(JulieXMLConstants.NAME));
-			}
-			primaryKey = new String[pkColumnNames.size()];
-			pkColumnNames.toArray(primaryKey);
+			primaryKey = getPrimaryKeyFields().
+					map(field -> field.get(JulieXMLConstants.NAME)).
+					toArray(String[]::new);
 		}
 		return primaryKey;
 	}
+
+	public Stream<Map<String, String>> getPrimaryKeyFields() {
+	    return fields.stream().filter(field -> Boolean.parseBoolean(field.get(JulieXMLConstants.PRIMARY_KEY)));
+    }
 
 	/**
 	 * 

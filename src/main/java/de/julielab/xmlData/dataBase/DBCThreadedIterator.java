@@ -20,10 +20,12 @@ import java.util.concurrent.Exchanger;
  */
 public abstract class DBCThreadedIterator<E> extends DBCIterator<E> {
 	// Exchangers switch results between 2 threads as needed
-	protected Exchanger<List<E>> listExchanger = new Exchanger<List<E>>();
-	protected Iterator<E> currentListIter;
-	protected boolean hasNext = true;
+	protected Exchanger<List<E>> listExchanger = new Exchanger<>();
 	protected Thread backgroundThread;
+	private Iterator<E> currentListIter;
+	private boolean hasNext = true;
+
+
 
 	public boolean hasNext() {
 		return hasNext;
@@ -60,13 +62,8 @@ public abstract class DBCThreadedIterator<E> extends DBCIterator<E> {
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see de.julielab.xmlData.dataBase.DBCIterator#destroy()
-	 */
 	@Override
 	public void close() {
-		// TODO Auto-generated method stub
-		
 	}
 
 	
