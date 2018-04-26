@@ -3784,6 +3784,7 @@ public class DataBaseConnector {
                     mapToObj(i -> xmiConfig.getFields().get(i)).
                     forEach(fields::add);
             ret = new FieldConfig(fields, "", fieldConfigName);
+            fieldConfigs.put(ret.getName(), ret);
         } else {
             ret = fieldConfigs.get(fieldConfigs.get(fieldConfigName));
         }
@@ -3818,6 +3819,7 @@ public class DataBaseConnector {
                     mapToObj(i -> xmiConfig.getFields().get(i)).
                     forEach(fields::add);
             ret = new FieldConfig(fields, "", fieldConfigName);
+            fieldConfigs.put(ret.getName(), ret);
         } else {
             ret = fieldConfigs.get(fieldConfigs.get(fieldConfigName));
         }
