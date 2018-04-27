@@ -4,6 +4,7 @@ import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
 import de.julielab.xmlData.config.FieldConfig;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,21 +103,19 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         private Exchanger<ResultSet> resExchanger = new Exchanger<ResultSet>();
         private ResultSet currentRes;
         private ArrayList<byte[][]> currentList;
-        private String[] table;
         private String[] schemaName;
         private boolean joined = false;
         private volatile boolean end = false;
 
-        ArrayResToListThread(Exchanger<List<byte[][]>> listExchanger, List<Object[]> keyList, String[] table,
+        ArrayResToListThread(Exchanger<List<byte[][]>> listExchanger, List<Object[]> keyList, String[] tables,
                              String whereClause, String[] schemaName) {
             this.listExchanger = listExchanger;
-            this.table = table;
             this.schemaName = schemaName;
-            if (table.length > 1 && schemaName.length > 1) {
+            if (tables.length > 1) {
                 this.joined = true;
             }
             // start the thread that is actually querying the database
-            arrayFromDBThread = new ArrayFromDBThread(resExchanger, keyList, table, whereClause, schemaName);
+            arrayFromDBThread = new ArrayFromDBThread(resExchanger, keyList, tables, whereClause, schemaName);
             try {
                 // retrieve the first result without yet running the thread;
                 // when we have the result, we begin to create the result list
@@ -132,9 +131,9 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
 
         @SuppressWarnings("unchecked")
         public void run() {
-            List<Object> numColumnsAndFields = dbc.getNumColumnsAndFields(joined, table, schemaName);
-            int numColumns = (Integer) numColumnsAndFields.get(0);
-            List<Map<String, String>> fields = (List<Map<String, String>>) numColumnsAndFields.get(1);
+            Pair<Integer, List<Map<String, String>>> numColumnsAndFields = dbc.getNumColumnsAndFields(joined, schemaName);
+            int numColumns = numColumnsAndFields.getLeft();
+            List<Map<String, String>> fields = numColumnsAndFields.getRight();
             int i = 0;
             byte[][] retrievedData = null;
             try {

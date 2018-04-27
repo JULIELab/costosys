@@ -30,6 +30,8 @@ import de.julielab.xmlData.config.FieldConfigurationManager;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
 import de.julielab.xmlData.dataBase.util.UnobtainableConnectionException;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -326,7 +328,7 @@ public class DataBaseConnector {
         if (null == dataSource) {
             LOG.debug("Setting up connection pool data source");
             HikariConfig hikariConfig = new HikariConfig();
-            hikariConfig.setPoolName("costosys-"+System.nanoTime());
+            hikariConfig.setPoolName("costosys-" + System.nanoTime());
             hikariConfig.setJdbcUrl(dbURL);
             hikariConfig.setUsername(user);
             hikariConfig.setPassword(password);
@@ -1252,6 +1254,20 @@ public class DataBaseConnector {
             referencedTable = getReferencedTable(referencedTable);
         }
         return referencedTable;
+    }
+
+    /**
+     * Determines the first data table on the reference path <code>referencingTable -> table1 -> table2 -> ... -> lastTable -> null</code>
+     * referenced from <code>referencingTable</code>. This means that <code>referencingTable</code> is returned itself
+     * if it is a data table.
+     * @param referencingTable The start point table for the path for which the first data table is to be returned.
+     * @return The first data table on the foreign-key path beginning with <code>referencingTable</code> itself.
+     * @throws SQLException If a database operation fails.
+     */
+    public String getNextOrThisDataTable(String referencingTable) throws SQLException {
+        if (isDataTable(referencingTable))
+            return referencingTable;
+        return getNextDataTable(referencingTable);
     }
 
     /**
@@ -3274,16 +3290,25 @@ public class DataBaseConnector {
         return null;
     }
 
-    public List<Object> getNumColumnsAndFields(boolean joined, String[] tables, String[] schemaNames) {
-        List<Object> numColumnsAndFields = new ArrayList<Object>();
+    /**
+     * Helper method to determine the columns that are returned in case of a joining operation. Returns the number of
+     * returned fields and the according field definitions. If <code>joined</code> is set to <code>false</code>, only the
+     * first table and the first schema is taken into account.
+     *
+     * @param joined      Whether the data is joined.
+     * @param schemaNames The names of the table schemas of the tables that are read. From the respective table schemas,
+     *                    the columns that are marked to be retrieved, are extracted.
+     * @return A pair holding the number of retrieved columns and those columns themselves.
+     */
+    public Pair<Integer, List<Map<String, String>>> getNumColumnsAndFields(boolean joined, String[] schemaNames) {
         int numColumns = 0;
-        List<Map<String, String>> fields = new ArrayList<Map<String, String>>();
+        List<Map<String, String>> fields = new ArrayList<>();
         if (!joined) {
             FieldConfig fieldConfig = fieldConfigs.get(schemaNames[0]);
             numColumns = fieldConfig.getColumnsToRetrieve().length;
             fields = fieldConfig.getFields();
         } else {
-            for (int i = 0; i < tables.length; i++) {
+            for (int i = 0; i < schemaNames.length; i++) {
                 FieldConfig fieldConfig = fieldConfigs.get(schemaNames[i]);
                 int num = fieldConfig.getColumnsToRetrieve().length;
                 numColumns = numColumns + num;
@@ -3291,9 +3316,7 @@ public class DataBaseConnector {
                 fields.addAll(fieldsPartly);
             }
         }
-        numColumnsAndFields.add(numColumns);
-        numColumnsAndFields.add(fields);
-        return numColumnsAndFields;
+        return new ImmutablePair<>(numColumns, fields);
     }
 
     /**
@@ -3491,8 +3514,8 @@ public class DataBaseConnector {
     }
 
     /**
-     * @param tableName
-     * @return
+     * Checks whether the given table matches the active table schema.
+     * @param tableName The table to check.
      * @see #checkTableDefinition(String, String)
      */
     public void checkTableDefinition(String tableName) throws TableSchemaMismatchException {
@@ -3509,6 +3532,8 @@ public class DataBaseConnector {
      * @param tableName - table to check
      */
     public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException {
+        if (!tableExists(tableName))
+            throw new IllegalArgumentException("The table '" + tableName + "' does not exist.");
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         List<String> actualColumns = new ArrayList<>();
@@ -3810,7 +3835,13 @@ public class DataBaseConnector {
         String fieldConfigName = StringUtils.join(pkNames, "-") + "-xmi-annotations-autogenerated";
         FieldConfig ret;
         if (!fieldConfigs.containsKey(fieldConfigName)) {
-            List<Map<String, String>> fields = new ArrayList<>(primaryKey);
+            List<Map<String, String>> fields = new ArrayList<>();
+            // Important: For the annotation tables we don't want to return their primary key. They are used
+            // as AdditionalTable parameter to the XmiDBReader and the primary key is already returned from the
+            // data table schema.
+            // We make a copy of the primary key fields so we can change them without manipulating the given key.
+            primaryKey.stream().map(HashMap::new).forEach(fields::add);
+            fields.forEach(pkField -> pkField.put(JulieXMLConstants.RETRIEVE, "false"));
             FieldConfig xmiConfig = fieldConfigs.get(doGzip ? "xmi_annotation_gzip" : "xmi_annotation");
             HashSet<Integer> xmiConfigPkIndices = new HashSet<>(xmiConfig.getPrimaryKeyFieldNumbers());
             // Add those fields to the new configuration that are not the primary key fields
