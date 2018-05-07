@@ -3710,7 +3710,7 @@ public class DataBaseConnector {
         return pkIndices;
     }
 
-    public void checkTableSchemaCompatibility(String referenceSchema, String... schemaNames) throws TableSchemaMismatchException {
+    public void checkTableSchemaCompatibility(String referenceSchema, String[] schemaNames) throws TableSchemaMismatchException {
         String[] schemas = new String[schemaNames.length + 1];
         schemas[0] = referenceSchema;
         System.arraycopy(schemaNames, 0, schemas, 1, schemaNames.length);
