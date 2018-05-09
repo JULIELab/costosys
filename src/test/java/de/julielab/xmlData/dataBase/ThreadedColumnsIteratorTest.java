@@ -41,4 +41,16 @@ public class ThreadedColumnsIteratorTest {
         }
         assertEquals(10, numRetrieved);
     }
+
+    @Test
+    public void testIteratorWithLimit() {
+        ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
+        int numRetrieved = 0;
+        while (it.hasNext()) {
+            Object[] next = it.next();
+            Arrays.toString(next);
+            numRetrieved++;
+        }
+        assertEquals(2, numRetrieved);
+    }
 }

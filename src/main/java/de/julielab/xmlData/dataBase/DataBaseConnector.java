@@ -2907,6 +2907,19 @@ public class DataBaseConnector {
     }
 
     /**
+     * Returns the requested fields from the requested table. The iterator must be fully consumed or dangling threads
+     * and connections will remain, possible causing the application to wait forever for an open connection.
+     *
+     * @param table  The table to query.
+     * @param fields The names of the columns to retrieve values from.
+     * @param limit A limit of documents to retrieve.
+     * @return An iterator over the requested columns values.
+     */
+    public DBCIterator<Object[]> query(String table, List<String> fields, long limit) {
+        return new ThreadedColumnsIterator(this, fields, table, limit);
+    }
+
+    /**
      * Returns the values the the column {@link #DEFAULT_FIELD} in the given table.
      * The Iterator will use threads, memory and a connection until all matches were
      * returned.

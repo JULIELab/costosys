@@ -17,7 +17,7 @@ import java.util.concurrent.Exchanger;
 import java.util.function.Function;
 
 /**
- * Retrieves a single fields from the requested table. Uses a background thread for fetching the next batch of fields
+ * Retrieves a list of fields from the requested table. Uses a background thread for fetching the next batch of fields
  * after the previous batch has been returned.
  *
  * @author hellrich
@@ -26,19 +26,26 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     private final static Logger LOG = LoggerFactory.getLogger(ThreadedColumnsIterator.class);
     private DataBaseConnector dbc;
 
-    // To query by PMID, uses two other threads
     public ThreadedColumnsIterator(DataBaseConnector dbc, List<String[]> keys, List<String> fields, String table, String schemaName) {
+        this(dbc, keys, fields, table, -1, schemaName);
+    }
+    // To query by PMID, uses two other threads
+    public ThreadedColumnsIterator(DataBaseConnector dbc, List<String[]> keys, List<String> fields, String table, long limit, String schemaName) {
         LOG.trace("Initializing iterator to read {} values from table {} for the columns {}", keys.size(), table, fields);
         this.dbc = dbc;
-        backgroundThread = new ResToListThread(listExchanger, keys, fields, table, schemaName);
+        backgroundThread = new ResToListThread(listExchanger, keys, fields, table, limit, schemaName);
         update();
     }
 
-    // To query all, uses only one other thread
     public ThreadedColumnsIterator(DataBaseConnector dbc, List<String> fields, String table) {
+        this(dbc, fields, table, -1);
+    }
+
+    // To query all, uses only one other thread
+    public ThreadedColumnsIterator(DataBaseConnector dbc, List<String> fields, String table, long limit) {
         LOG.trace("Initializing iterator to read all values from table {} for the columns {}", table, fields);
         this.dbc = dbc;
-        backgroundThread = new ListFromDBThread(listExchanger, fields, table);
+        backgroundThread = new ListFromDBThread(listExchanger, fields, table, limit);
         update();
     }
 
@@ -56,10 +63,10 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private List<Object[]> currentList;
 
         ResToListThread(Exchanger<List<Object[]>> listExchanger, List<String[]> keys, List<String> fields, String table,
-                        String schemaName) {
+                     long limit,   String schemaName) {
             this.listExchanger = listExchanger;
             this.fields = fields;
-            new FromDBThread(resExchanger, keys, this.fields, table, schemaName);
+            new FromDBThread(resExchanger, keys, this.fields, table, limit, schemaName);
             try {
                 log.trace("Retrieving first ResultSet from the database thread");
                 currentRes = resExchanger.exchange(null);
@@ -117,9 +124,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private ResultSet currentRes;
         private Connection conn;
         private FieldConfig fieldConfig;
+        private long limit;
 
         public FromDBThread(Exchanger<ResultSet> resExchanger, List<String[]> keys, List<String> fields, String table,
-                            String schemaName) {
+                          long limit,  String schemaName) {
+            this.limit = limit;
             this.conn = dbc.getConn();
             this.resExchanger = resExchanger;
             this.fieldConfig = dbc.getFieldConfiguration(schemaName);
@@ -173,7 +182,8 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                 }
                 sql.delete(sql.length() - 4, sql.length()); // Remove trailing
                 // " OR "
-                rs = st.executeQuery(sql.toString());
+                String limit = this.limit > 0 ? " LIMIT " + this.limit : "";
+                rs = st.executeQuery(sql.toString() + limit);
             } catch (SQLException e) {
                 e.printStackTrace();
                 System.err.println(sql.toString());
@@ -205,10 +215,10 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private ResultSet res;
         private Connection conn;
 
-        public ListFromDBThread(Exchanger<List<Object[]>> listExchanger, List<String> fields, String table) {
+        public ListFromDBThread(Exchanger<List<Object[]>> listExchanger, List<String> fields, String table, long limit) {
             this.listExchanger = listExchanger;
             this.fields = fields;
-            selectFrom = String.format("SELECT %s FROM %s", StringUtils.join(fields, ","), table);
+            selectFrom = String.format("SELECT %s FROM %s %s", StringUtils.join(fields, ","), table, limit > 0 ? " LIMIT " + limit : "");
             log.trace("Reading data from table {} with SQL: {}", table, selectFrom);
             try {
                 conn = dbc.getConn();
