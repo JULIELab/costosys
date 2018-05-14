@@ -1260,6 +1260,7 @@ public class DataBaseConnector {
      * Determines the first data table on the reference path <code>referencingTable -> table1 -> table2 -> ... -> lastTable -> null</code>
      * referenced from <code>referencingTable</code>. This means that <code>referencingTable</code> is returned itself
      * if it is a data table.
+     *
      * @param referencingTable The start point table for the path for which the first data table is to be returned.
      * @return The first data table on the foreign-key path beginning with <code>referencingTable</code> itself.
      * @throws SQLException If a database operation fails.
@@ -2912,7 +2913,7 @@ public class DataBaseConnector {
      *
      * @param table  The table to query.
      * @param fields The names of the columns to retrieve values from.
-     * @param limit A limit of documents to retrieve.
+     * @param limit  A limit of documents to retrieve.
      * @return An iterator over the requested columns values.
      */
     public DBCIterator<Object[]> query(String table, List<String> fields, long limit) {
@@ -3384,9 +3385,7 @@ public class DataBaseConnector {
                 joiner.add(String.format("sum(1) as %s", Constants.TOTAL));
             conn = getConn();
             String sql = String.format(
-                    "SELECT " + joiner.toString() + " FROM %s",
-                    Constants.HAS_ERRORS, Constants.HAS_ERRORS, Constants.IS_PROCESSED, Constants.IS_PROCESSED,
-                    Constants.IN_PROCESS, Constants.IN_PROCESS, Constants.TOTAL, subsetTableName);
+                    "SELECT " + joiner.toString() + " FROM %s", subsetTableName);
             Statement stmt = conn.createStatement();
             {
                 ResultSet res = stmt.executeQuery(sql);
@@ -3528,6 +3527,7 @@ public class DataBaseConnector {
 
     /**
      * Checks whether the given table matches the active table schema.
+     *
      * @param tableName The table to check.
      * @see #checkTableDefinition(String, String)
      */
