@@ -30,6 +30,18 @@
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
 					retrieve="true" gzip="true"/>
 			</tableSchema>
+			<tableSchema name="xmi_complete_cas" forEach=".">
+				<field name="docid" type="text" xpath="PMID" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xmi" type="text" xpath="." returnXMLFragment="true"
+					   retrieve="true"/>
+			</tableSchema>
+			<tableSchema name="xmi_complete_cas_gzip" forEach=".">
+				<field name="docid" type="text" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xmi" type="bytea"
+					   retrieve="true" gzip="true"/>
+			</tableSchema>
 			<tableSchema name="xmi_text" forEach=".">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
 					retrieve="true"/>
