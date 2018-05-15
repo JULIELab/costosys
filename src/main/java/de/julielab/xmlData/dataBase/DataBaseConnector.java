@@ -2550,9 +2550,13 @@ public class DataBaseConnector {
             // existed documents with same primary keys multiple times in the
             // data.",
             // alreadyUpdatedIds.size(), numAlreadyExisted);
-            LOG.info(
-                    "Updated {} documents. {} documents were skipped because there existed documents with same primary keys multiple times in the data. In those cases, the last occurrence of the document was inserted into the database",
-                    rowsByPk.size(), numAlreadyExisted);
+            String msg = "Updated {} documents. {} documents were skipped because there existed documents with same primary keys multiple times in the data. In those cases, the last occurrence of the document was inserted into the database";
+            if (numAlreadyExisted == 0)
+                LOG.debug(
+                        msg,
+                        rowsByPk.size(), numAlreadyExisted);
+            else
+                LOG.warn(msg, rowsByPk.size(), numAlreadyExisted);
         } catch (SQLException e) {
             LOG.error(
                     "SQL error while updating table {}. Database configuration is: {}. Table schema configuration is: {}",
