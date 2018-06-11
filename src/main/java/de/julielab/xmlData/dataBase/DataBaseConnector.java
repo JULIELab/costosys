@@ -3925,7 +3925,7 @@ public class DataBaseConnector {
             }
             File xmlFile = new File(xmlFilePath);
             boolean hugeFile = false;
-            if (xmlFile.length() >= 1024 * 1024 * 1024) {
+            if (!fileName.endsWith(".zip") && xmlFile.length() >= 1024 * 1024 * 1024) {
                 LOG.info("File is larger than 1GB. Trying VTD huge.");
                 hugeFile = true;
             }
