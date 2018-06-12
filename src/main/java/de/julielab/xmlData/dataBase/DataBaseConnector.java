@@ -90,7 +90,7 @@ public class DataBaseConnector {
     private final static int BUFFER_SIZE = 1000;
     private static final String DEFAULT_FIELD = "xml";
     private static final String DEFAULT_TABLE = Constants.DEFAULT_DATA_TABLE_NAME;
-    private static final int commitBatchSize = 10000;
+    private static final int commitBatchSize = 100;
     private static final int RETRIEVE_MARK_LIMIT = 1000;
     private static final int ID_SUBLIST_SIZE = 1000;
     private static final Map<String, HikariDataSource> pools = new ConcurrentHashMap<>();
