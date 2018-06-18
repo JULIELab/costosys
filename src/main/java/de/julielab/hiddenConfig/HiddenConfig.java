@@ -130,7 +130,7 @@ public class HiddenConfig {
 
 		try {
 			while (true) {
-				System.out.println("No entry for " + DBConnectionName + " exists, do you want to create one - Y/N ?");
+				System.out.println("This is the interactive credentials entry dialog to access the database with name " + DBConnectionName + ". Do you wish to enter your credentials now - Y/N ?");
 				String answer = null;
 				try {
 					answer = in.readLine();
@@ -146,7 +146,7 @@ public class HiddenConfig {
 			}
 		} catch (Exception e1) {
 			LOG.error(
-					"An error occurred during the user-interactive dialogue to create a new login for the database {}. If you are running into this error with a program that is not meant to be interactive, you have create the login entry beforehand. You can do this by doing something with the DataBaseConnector, e.g. showing all tables with the -t switch. Alternatively, you can directly edit the hidden configuration file. By default, it is found at ${HOME}/.dbcUser. The original error was: {}",
+					"An error occurred during the user-interactive dialog to create a new login for the database {}. If you are running into this error with a program that is not meant to be interactive, you have create the login entry beforehand. You can do this by doing something with the DataBaseConnector, e.g. showing all tables with the -t switch. Alternatively, you can directly edit the hidden configuration file. By default, it is found at ${HOME}/.dbcUser. The original error was: {}",
 					DBConnectionName, e1);
 			e1.printStackTrace();
 		}
