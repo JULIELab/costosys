@@ -9,6 +9,8 @@ import org.junit.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.EnumSet;
 import java.util.List;
@@ -46,7 +48,7 @@ public class DataBaseConnectorTest {
     // Depends on the test above!
     @Test
     public void testStatus() throws SQLException, TableSchemaMismatchException, TableNotFoundException {
-        dbc.createSubsetTable("statussubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset" );
+        dbc.createSubsetTable("statussubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
         dbc.initSubset("statussubset", Constants.DEFAULT_DATA_TABLE_NAME);
         int bs = dbc.getQueryBatchSize();
         // mark a few documents to be in process
@@ -56,5 +58,20 @@ public class DataBaseConnectorTest {
         assertThat(status.inProcess).isEqualTo(2);
         assertThat(status.pipelineStates).containsKeys("testcomponent").extracting("testcomponent").contains(2L);
         dbc.setQueryBatchSize(2);
+    }
+
+    // Depends on the test above!
+    @Test
+    public void testRandomSubset() throws SQLException {
+        dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
+        dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
+        Connection conn = dbc.getConn();
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM randomsubset");
+        int numrows = 0;
+        while (rs.next()) {
+            numrows++;
+        }
+        assertThat(numrows).isEqualTo(10);
+        conn.close();
     }
 }
