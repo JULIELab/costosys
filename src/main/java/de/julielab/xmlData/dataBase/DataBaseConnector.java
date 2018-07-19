@@ -1324,6 +1324,8 @@ public class DataBaseConnector {
      * @return true if the table exists, false otherwise
      */
     public boolean tableExists(Connection conn, String tableName) {
+        if (tableName == null)
+            throw new IllegalArgumentException("The passed table name is null.");
         try {
             Statement stmt = conn.createStatement();
             String pureTableName = tableName;
