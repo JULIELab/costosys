@@ -3,31 +3,36 @@ package de.julielab.xmlData.dataBase;
 import de.julielab.xmlData.Constants;
 import de.julielab.xmlData.cli.TableNotFoundException;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.BeforeClass;
+import org.testng.annotations.Test;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.EnumSet;
-import java.util.List;
+import java.util.*;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.testng.AssertJUnit.assertEquals;
-
+import static org.assertj.core.api.Assertions.*;
 public class DataBaseConnectorTest {
 
-    @ClassRule
-    public static PostgreSQLContainer postgres = (PostgreSQLContainer) new PostgreSQLContainer();
+    public static PostgreSQLContainer postgres;
     private static DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setup() throws SQLException, IOException {
+    public static void setup(){
+        postgres =  new PostgreSQLContainer();
+        postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
+    }
+
+    @AfterClass
+    public static void shutdown(){
+        postgres.stop();
     }
 
     @Test
@@ -45,8 +50,7 @@ public class DataBaseConnectorTest {
         assertEquals(0, retrievedKeys.size());
     }
 
-    // Depends on the test above!
-    @Test
+    @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testStatus() throws SQLException, TableSchemaMismatchException, TableNotFoundException {
         dbc.createSubsetTable("statussubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
         dbc.initSubset("statussubset", Constants.DEFAULT_DATA_TABLE_NAME);
@@ -60,8 +64,7 @@ public class DataBaseConnectorTest {
         dbc.setQueryBatchSize(2);
     }
 
-    // Depends on the test above!
-    @Test
+    @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testRandomSubset() throws SQLException {
         dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
         dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
@@ -73,5 +76,18 @@ public class DataBaseConnectorTest {
         }
         assertThat(numrows).isEqualTo(10);
         conn.close();
+    }
+
+    @Test
+    public void testXmlData() throws SQLException, UnsupportedEncodingException {
+        dbc.createTable("myxmltest", "xmi_text","XML Test Table");
+        Map<String, Object> row = new HashMap<>();
+        row.put("docid", "doc1");
+        row.put("xmi", "some nonsense");
+        assertThatCode(() -> dbc.importFromRowIterator(Arrays.asList(row).iterator(), "myxmltest", "xmi_text")).doesNotThrowAnyException();
+        DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, "xmi_text");
+        byte[][] next = dbcIterator.next();
+        assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
+        assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
     }
 }

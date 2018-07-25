@@ -2273,6 +2273,14 @@ public class DataBaseConnector {
     }
 
     /**
+     * @param it
+     * @param tableName
+     */
+    public void importFromRowIterator(Iterator<Map<String, Object>> it, String tableName, String tableSchema) {
+        importFromRowIterator(it, tableName, null, true, tableSchema);
+    }
+
+    /**
      * Internal method to import into an existing table
      *
      * @param it           - an Iterator, yielding rows to insert into the database
@@ -2303,14 +2311,10 @@ public class DataBaseConnector {
             if (null == externalConn)
                 conn.setAutoCommit(false);
             PreparedStatement psDataImport = conn.prepareStatement(dataImportStmtString);
-            /*
-             * PreparedStatement psMirrorUpdate = conn
-             * .prepareStatement(mirrorUpdateStmtString);
-             */
 
             List<PreparedStatement> mirrorStatements = null;
             if (mirrorNames != null) {
-                mirrorStatements = new ArrayList<PreparedStatement>();
+                mirrorStatements = new ArrayList<>();
                 for (String mirror : mirrorNames.keySet()) {
                     mirrorStatements.add(conn.prepareStatement(String.format(mirrorUpdateStmtString, mirror)));
                 }
@@ -2729,7 +2733,10 @@ public class DataBaseConnector {
         StringBuilder valuesStrBuilder = new StringBuilder();
         for (int i = 0; i < fields.size(); ++i) {
             columnsStrBuilder.append(fields.get(i).get(JulieXMLConstants.NAME));
-            valuesStrBuilder.append("?");
+            if (fields.get(i).get(JulieXMLConstants.TYPE).equals("xml"))
+                valuesStrBuilder.append("XMLPARSE(CONTENT ?)");
+            else
+                valuesStrBuilder.append("?");
             if (i < fields.size() - 1) {
                 columnsStrBuilder.append(",");
                 valuesStrBuilder.append(",");

@@ -31,10 +31,8 @@
 					retrieve="true" gzip="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_complete_cas" forEach=".">
-				<field name="docid" type="text" xpath="PMID" primaryKey="true"
-					   retrieve="true"/>
-				<field name="xmi" type="text" xpath="." returnXMLFragment="true"
-					   retrieve="true"/>
+				<field name="docid" type="text" primaryKey="true"  retrieve="true"/>
+				<field name="xmi" type="xml" retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_complete_cas_gzip" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
@@ -47,14 +45,12 @@
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_annotation" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="false"/>
+				<field name="docid" type="xml" primaryKey="true" retrieve="false"/>
 				<field name="xmi" type="xml" retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_text_gzip" forEach=".">
-				<field name="docid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"/>
-				<field name="xmi" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"/>
+				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="xmi" type="bytea" 	retrieve="true" gzip="true"/>
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
 			</tableSchema>
