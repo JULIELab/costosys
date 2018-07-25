@@ -193,7 +193,7 @@ public class FieldConfig extends ConfigBase {
 
 	public static boolean isKnownType(String type) {
 		return isStringType(type) || isTimestampWithoutTZType(type) || isStringTypeArray(type)
-				|| isIntegerType(type) || isBooleanType(type) || isBinaryDataType(type);
+				|| isIntegerType(type) || isBooleanType(type) || isBinaryDataType(type) || isXmlType(type);
 	}
 
 	public static boolean isBinaryDataType(String type) {
@@ -207,7 +207,10 @@ public class FieldConfig extends ConfigBase {
 	public static boolean isStringTypeArray(String type) {
 		return type.equals(Constants.TYPE_TEXT_ARRAY) || type.equals(Constants.TYPE_VARCHAR_ARRAY);
 	}
-	
+
+	public static boolean isXmlType(String type) {
+		return type.equals(Constants.TYPE_XML);}
+
 	/**
 	 * @param type
 	 * @return

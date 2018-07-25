@@ -60,8 +60,10 @@ public final class Constants {
 	public static final String TYPE_TIMESTAMP_WITHOUT_TIMEZONE = "timestamp without time zone";
 
 	public static final String TYPE_INTEGER = "integer";
-	
+
 	public static final String TYPE_BOOLEAN = "boolean";
+
+    public static final String TYPE_XML = "xml";
 
 	public static final String XML_FIELD_NAME = "xml";
 
@@ -82,7 +84,7 @@ public final class Constants {
 	public static final String IS_PROCESSED = "is_processed";
 
 	public static final String LAST_COMPONENT = "last_component";
-	
+
 	public static final String HOST_NAME = "host_name";
 
 	public static final String PROCESSING_TIMESTAMP = "processing_timestamp";

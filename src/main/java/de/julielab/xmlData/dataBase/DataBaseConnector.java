@@ -1352,17 +1352,6 @@ public class DataBaseConnector {
                 ne.printStackTrace();
         }
         return false;
-
-        // After that, the connection cannot be used any more because
-        // "current transaction is aborted, commands ignored until end of
-        // transaction block"
-        // try {
-        // conn.createStatement().executeQuery(
-        // "SELECT * FROM " + tableName + " LIMIT 1"); // Provoking
-        // return true;
-        // } catch (SQLException e) {
-        // return false;
-        // }
     }
 
     /**
