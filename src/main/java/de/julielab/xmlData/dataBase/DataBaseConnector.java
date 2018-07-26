@@ -2711,6 +2711,24 @@ public class DataBaseConnector {
     }
 
     /**
+     * Creates an SQL-template, usable in prepared statements which add new values
+     * into a table
+     *
+     * @param fieldConfig - used to get the primary key, as the template must contain it
+     * @return - an SQL string for inserting, containing a '?' for every primary key
+     * and a %s for the table name
+     */
+    private String constructMirrorInsertStatementString(FieldConfig fieldConfig) {
+        String stmtTemplate = "INSERT INTO %s (%s) VALUES (%s)";
+        String pkStr = fieldConfig.getPrimaryKeyString();
+        String[] wildCards = new String[fieldConfig.getPrimaryKey().length];
+        for (int i = 0; i < wildCards.length; i++)
+            wildCards[i] = "?";
+        String wildCardStr = StringUtils.join(wildCards, ",");
+        return String.format(stmtTemplate, "%s", pkStr, wildCardStr);
+    }
+
+    /**
      * Constructs an SQL prepared statement for import of data rows into the
      * database table <code>tableName</code> according to the field schema
      * definition.
@@ -2745,23 +2763,6 @@ public class DataBaseConnector {
         return String.format(stmtTemplate, tableName, columnsStrBuilder.toString(), valuesStrBuilder.toString());
     }
 
-    /**
-     * Creates an SQL-template, usable in prepared statements which add new values
-     * into a table
-     *
-     * @param fieldConfig - used to get the primary key, as the template must contain it
-     * @return - an SQL string for inserting, containing a '?' for every primary key
-     * and a %s for the table name
-     */
-    private String constructMirrorInsertStatementString(FieldConfig fieldConfig) {
-        String stmtTemplate = "INSERT INTO %s (%s) VALUES (%s)";
-        String pkStr = fieldConfig.getPrimaryKeyString();
-        String[] wildCards = new String[fieldConfig.getPrimaryKey().length];
-        for (int i = 0; i < wildCards.length; i++)
-            wildCards[i] = "?";
-        String wildCardStr = StringUtils.join(wildCards, ",");
-        return String.format(stmtTemplate, "%s", pkStr, wildCardStr);
-    }
 
     /**
      * Constructs an SQL prepared statement for updating data rows in the database
@@ -2783,7 +2784,11 @@ public class DataBaseConnector {
         List<Map<String, String>> fields = fieldDefinition.getFields();
         StringBuilder newValueStrBuilder = new StringBuilder();
         for (int i = 0; i < fields.size(); ++i) {
-            newValueStrBuilder.append(fields.get(i).get(JulieXMLConstants.NAME)).append("=?");
+            newValueStrBuilder.append(fields.get(i).get(JulieXMLConstants.NAME));
+            if (fields.get(i).get(JulieXMLConstants.TYPE).equals("xml"))
+                newValueStrBuilder.append("=XMLPARSE(CONTENT ?)");
+            else
+                newValueStrBuilder.append("=?");
             if (i < fields.size() - 1)
                 newValueStrBuilder.append(",");
         }
@@ -2800,27 +2805,6 @@ public class DataBaseConnector {
         LOG.trace("PreparedStatement update command: {}", statementString);
         return statementString;
     }
-
-    /**
-     * Used internal to commit the changes done by a connection in a seperate thread
-     * NOTE If a fast return from a commit is required, rather use Postgres
-     * asynchroneous commit
-     * (http://www.postgresql.org/docs/9.1/static/wal-async-commit.html)
-     */
-    // private void commit(final Connection conn) throws InterruptedException {
-    // if (commitThread != null)
-    // commitThread.join();
-    // commitThread = new Thread() {
-    // public void run() {
-    // try {
-    // conn.commit();
-    // } catch (SQLException e) {
-    // e.printStackTrace();
-    // }
-    // }
-    // };
-    // commitThread.start();
-    // }
 
     /**
      * Alters an table, executing the supplied action
