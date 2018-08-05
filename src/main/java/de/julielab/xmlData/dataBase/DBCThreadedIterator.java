@@ -21,7 +21,7 @@ import java.util.concurrent.Exchanger;
 public abstract class DBCThreadedIterator<E> extends DBCIterator<E> {
 	// Exchangers switch results between 2 threads as needed
 	protected Exchanger<List<E>> listExchanger = new Exchanger<>();
-	protected Thread backgroundThread;
+	protected ConnectionClosable backgroundThread;
 	private Iterator<E> currentListIter;
 	private boolean hasNext = true;
 

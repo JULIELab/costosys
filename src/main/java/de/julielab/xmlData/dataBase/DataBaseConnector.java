@@ -155,7 +155,7 @@ public class DataBaseConnector {
         this.dbURL = dbConfig.getUrl();
         this.fieldConfigs = config.getFieldConfigs();
         this.activeDataSchema = config.getActiveDataSchema();
-        this.activeDataTable = this.activeDataSchema + "." + config.getActiveDataTable();
+        this.activeDataTable = config.getActiveDataSchema().contains(".") ? config.getActiveDataTable() : this.activeDataSchema + "." + config.getActiveDataTable();
         this.activeTableSchema = config.getActiveSchemaName();
         this.effectiveConfiguration = config.getMergedConfigData();
 
@@ -3208,15 +3208,16 @@ public class DataBaseConnector {
             stmt.setFetchSize(queryBatchSize);
             // As we want to query the whole subset/data table, just get a
             // cursor over all IDs in the set.
+            String sql = "SELECT (" + fieldConfig.getPrimaryKeyString() + ") FROM " + tableName;
             final ResultSet outerKeyRS = stmt
-                    .executeQuery("SELECT (" + fieldConfig.getPrimaryKeyString() + ") FROM " + tableName);
+                    .executeQuery(sql);
             final DataBaseConnector dbc = this;
 
             DBCIterator<byte[][]> it = new DBCIterator<byte[][]>() {
 
                 private long returnedDocs = 0;
                 private ResultSet keyRS = outerKeyRS;
-                private long limit = limitParam < 0 ? Long.MAX_VALUE : limitParam;
+                private long limit = limitParam <= 0 ? Long.MAX_VALUE : limitParam;
                 private Iterator<byte[][]> xmlIt;
 
                 @Override
@@ -3238,9 +3239,9 @@ public class DataBaseConnector {
                                 ++currentBatchSize;
                             }
                             if (whereClause != null)
-                                xmlIt = new ThreadedColumnsToRetrieveIterator(dbc, ids, dataTable, whereClause, schemaName);
+                                xmlIt = new ThreadedColumnsToRetrieveIterator(dbc, conn, ids, dataTable, whereClause, schemaName);
                             else
-                                xmlIt = new ThreadedColumnsToRetrieveIterator(dbc, ids, dataTable, schemaName);
+                                xmlIt = new ThreadedColumnsToRetrieveIterator(dbc, conn, ids, dataTable, schemaName);
 
                             boolean xmlItHasNext = xmlIt.hasNext();
                             if (!xmlItHasNext)

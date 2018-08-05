@@ -78,6 +78,20 @@ public class DataBaseConnectorTest {
         conn.close();
     }
 
+    @Test(dependsOnMethods = "testRetrieveAndMark")
+    public void testQuerySubset() throws SQLException {
+        dbc.createSubsetTable("querysubset", Constants.DEFAULT_DATA_TABLE_NAME, "");
+        dbc.initSubset("querysubset", Constants.DEFAULT_DATA_TABLE_NAME);
+        assertThat(dbc.getNumRows("querysubset")).isGreaterThan(0);
+        DBCIterator<byte[][]> it = dbc.querySubset("querysubset", 0);
+        Set<String> retrieved = new HashSet<>();
+        while (it.hasNext()) {
+            byte[][] next = it.next();
+            retrieved.add(new String(next[0]));
+        }
+        assertThat(retrieved).hasSize(10);
+    }
+
     @Test
     public void testXmlData() throws SQLException, UnsupportedEncodingException {
         dbc.createTable("myxmltest", "xmi_text","XML Test Table");
