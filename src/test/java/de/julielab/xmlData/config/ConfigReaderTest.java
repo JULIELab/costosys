@@ -25,6 +25,8 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
+import de.julielab.xmlData.Constants;
+import de.julielab.xmlData.dataBase.DataBaseConnector;
 import org.apache.commons.io.IOUtils;
 import org.junit.Test;
 
@@ -264,8 +266,10 @@ public class ConfigReaderTest {
 
 	@Test
 	public void testMuh(){
+        System.setProperty(Constants.HIDDEN_CONFIG_PATH, "src/test/resources/DBTest/hiddenconfig");
 		InputStream is = ConfigReaderTest.class
-				.getResourceAsStream("/dbcConfiguration.xml");
-		ConfigReader cr = new ConfigReader(is);
+				.getResourceAsStream("/configuration/confWithQualifiedDataTable.xml");
+        DataBaseConnector dbc = new DataBaseConnector(is);
+		assertEquals("someschema.anothertable", dbc.getActiveDataTable());
 	}
 }

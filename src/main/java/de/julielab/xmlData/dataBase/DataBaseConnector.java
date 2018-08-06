@@ -155,7 +155,7 @@ public class DataBaseConnector {
         this.dbURL = dbConfig.getUrl();
         this.fieldConfigs = config.getFieldConfigs();
         this.activeDataSchema = config.getActiveDataSchema();
-        this.activeDataTable = config.getActiveDataSchema().contains(".") ? config.getActiveDataTable() : this.activeDataSchema + "." + config.getActiveDataTable();
+        this.activeDataTable = config.getActiveDataTable().contains(".") ? config.getActiveDataTable() : this.activeDataSchema + "." + config.getActiveDataTable();
         this.activeTableSchema = config.getActiveSchemaName();
         this.effectiveConfiguration = config.getMergedConfigData();
 
