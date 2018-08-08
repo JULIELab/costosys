@@ -25,9 +25,11 @@ import java.util.function.Function;
 public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     private final static Logger LOG = LoggerFactory.getLogger(ThreadedColumnsIterator.class);
     private DataBaseConnector dbc;
+
     public ThreadedColumnsIterator(DataBaseConnector dbc, List<String[]> keys, List<String> fields, String table, String schemaName) {
         this(dbc, null, keys, fields, table, schemaName);
     }
+
     public ThreadedColumnsIterator(DataBaseConnector dbc, Connection conn, List<String[]> keys, List<String> fields, String table, String schemaName) {
         this(dbc, conn, keys, fields, table, -1, schemaName);
     }
@@ -139,6 +141,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
      */
     private class FromDBThread extends Thread implements ConnectionClosable {
         private final Logger log = LoggerFactory.getLogger(FromDBThread.class);
+        private final boolean closeConnection;
         private Iterator<String[]> keyIter;
         private Exchanger<ResultSet> resExchanger;
         private String statement;
@@ -146,7 +149,6 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private Connection conn;
         private FieldConfig fieldConfig;
         private long limit;
-        private final boolean closeConnection;
 
         public FromDBThread(Connection conn, Exchanger<ResultSet> resExchanger, List<String[]> keys, List<String> fields, String table,
                             long limit, String schemaName) {
@@ -241,7 +243,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     private class ListFromDBThread extends Thread implements ConnectionClosable {
         private final Logger log = LoggerFactory.getLogger(ListFromDBThread.class);
         private final List<String> fields;
-        private boolean autoCommit;
+        private Boolean autoCommit;
         private Exchanger<List<Object[]>> listExchanger;
         private List<Object[]> currentList;
         private String selectFrom;
@@ -257,7 +259,8 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             try {
                 boolean closeConnection = conn == null;
                 this.conn = conn != null ? conn : dbc.getConn();
-                autoCommit = conn.getAutoCommit();
+                if (conn != null)
+                    autoCommit = conn.getAutoCommit();
                 conn.setAutoCommit(false);// cursor doesn't work otherwise
                 Statement st = conn.createStatement();
                 log.trace("Setting fetch size to {}", dbc.getQueryBatchSize());
@@ -319,7 +322,8 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         @Override
         public void closeConnection() {
             try {
-                conn.setAutoCommit(autoCommit);
+                if (autoCommit != null)
+                    conn.setAutoCommit(autoCommit);
             } catch (SQLException e) {
                 e.printStackTrace();
             }
