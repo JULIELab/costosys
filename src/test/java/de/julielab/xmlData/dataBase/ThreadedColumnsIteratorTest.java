@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Arrays;
 
@@ -31,27 +32,31 @@ public class ThreadedColumnsIteratorTest {
     }
 
     @Test
-    public void testIterator() {
-        ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, dbc.getConn(), Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
-        int numRetrieved = 0;
-        while (it.hasNext()) {
-            Object[] next = it.next();
-            Arrays.toString(next);
-            numRetrieved++;
+    public void testIterator() throws SQLException {
+        try(Connection conn = dbc.getConn()) {
+            ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
+            int numRetrieved = 0;
+            while (it.hasNext()) {
+                Object[] next = it.next();
+                Arrays.toString(next);
+                numRetrieved++;
+            }
+            it.closeConnection();
+            assertEquals(10, numRetrieved);
         }
-        it.closeConnection();
-        assertEquals(10, numRetrieved);
     }
 
     @Test
-    public void testIteratorWithLimit() {
-        ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, dbc.getConn(), Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
-        int numRetrieved = 0;
-        while (it.hasNext()) {
-            Object[] next = it.next();
-            Arrays.toString(next);
-            numRetrieved++;
+    public void testIteratorWithLimit() throws SQLException {
+        try(Connection conn = dbc.getConn()) {
+            ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
+            int numRetrieved = 0;
+            while (it.hasNext()) {
+                Object[] next = it.next();
+                Arrays.toString(next);
+                numRetrieved++;
+            }
+            assertEquals(2, numRetrieved);
         }
-        assertEquals(2, numRetrieved);
     }
 }

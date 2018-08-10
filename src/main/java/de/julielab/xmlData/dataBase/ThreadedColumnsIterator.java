@@ -257,12 +257,12 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             selectFrom = String.format("SELECT %s FROM %s %s", StringUtils.join(fields, ","), table, limit > 0 ? " LIMIT " + limit : "");
             log.trace("Reading data from table {} with SQL: {}", table, selectFrom);
             try {
-                boolean closeConnection = conn == null;
+                closeConnection = conn == null ? true : false;
                 this.conn = conn != null ? conn : dbc.getConn();
                 if (conn != null)
-                    autoCommit = conn.getAutoCommit();
-                conn.setAutoCommit(false);// cursor doesn't work otherwise
-                Statement st = conn.createStatement();
+                    autoCommit = this.conn.getAutoCommit();
+                this.conn.setAutoCommit(false);// cursor doesn't work otherwise
+                Statement st = this.conn.createStatement();
                 log.trace("Setting fetch size to {}", dbc.getQueryBatchSize());
                 st.setFetchSize(dbc.getQueryBatchSize()); // cursor
                 res = st.executeQuery(selectFrom);
@@ -328,7 +328,8 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                 e.printStackTrace();
             }
             try {
-                conn.close();
+                if (closeConnection)
+                    conn.close();
             } catch (SQLException e) {
                 e.printStackTrace();
             }

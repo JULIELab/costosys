@@ -263,13 +263,4 @@ public class ConfigReaderTest {
 		assertEquals("userTableSchema1", schemaNames.get(0));
 		assertEquals("userTableSchema2", schemaNames.get(1));
 	}
-
-	@Test
-	public void testMuh(){
-        System.setProperty(Constants.HIDDEN_CONFIG_PATH, "src/test/resources/DBTest/hiddenconfig");
-		InputStream is = ConfigReaderTest.class
-				.getResourceAsStream("/configuration/confWithQualifiedDataTable.xml");
-        DataBaseConnector dbc = new DataBaseConnector(is);
-		assertEquals("someschema.anothertable", dbc.getActiveDataTable());
-	}
 }
