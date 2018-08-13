@@ -345,37 +345,46 @@ public class DataBaseConnector {
         }
 
         try {
-            LOG.trace("Waiting for SQL connection to become free...");
-            if (LOG.isTraceEnabled()) {
-                // from https://github.com/brettwooldridge/HikariCP/wiki/MBean-(JMX)-Monitoring-and-Management
-                MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+            int retries = 0;
+            do {
                 try {
-                    String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
-                    ObjectName poolName = new ObjectName("com.zaxxer.hikari:type=Pool (" + poolNameStr + ")");
-                    HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
-                    int totalConnections = poolProxy.getTotalConnections();
-                    int idleConnections = poolProxy.getIdleConnections();
-                    int activeConnections = poolProxy.getActiveConnections();
-                    int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
-                    LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
-                    LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
-                    LOG.trace("Pool {} has {} active connections", poolName, activeConnections);
-                    LOG.trace("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
+                    LOG.trace("Waiting for SQL connection to become free...");
+                    if (LOG.isTraceEnabled()) {
+                        // from https://github.com/brettwooldridge/HikariCP/wiki/MBean-(JMX)-Monitoring-and-Management
+                        MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                        try {
+                            String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
+                            ObjectName poolName = new ObjectName("com.zaxxer.hikari:type=Pool (" + poolNameStr + ")");
+                            HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
+                            int totalConnections = poolProxy.getTotalConnections();
+                            int idleConnections = poolProxy.getIdleConnections();
+                            int activeConnections = poolProxy.getActiveConnections();
+                            int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
+                            LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
+                            LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
+                            LOG.trace("Pool {} has {} active connections", poolName, activeConnections);
+                            LOG.trace("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
 
-                } catch (MalformedObjectNameException e) {
-                    e.printStackTrace();
+                        } catch (MalformedObjectNameException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    conn = dataSource.getConnection();
+                    // conn = DriverManager.getConnection(fullURI);
+                    LOG.trace("SQL connection obtained.");
+                    Statement stm = conn.createStatement();
+                    if (!schemaExists(dbConfig.getActivePGSchema(), conn))
+                        createSchema(dbConfig.getActivePGSchema(), conn);
+                    if (!schemaExists(dbConfig.getActiveDataPGSchema(), conn))
+                        createSchema(dbConfig.getActiveDataPGSchema(), conn);
+                    stm.execute(String.format("SET search_path TO %s", dbConfig.getActivePGSchema()));
+                    stm.close();
+                } catch (SQLException e) {
+                    LOG.warn("Could not obtain a database connection within the timeout. Trying again. Number of try: {}", ++retries);
+                    if (retries == 3)
+                        throw e;
                 }
-            }
-            conn = dataSource.getConnection();
-            // conn = DriverManager.getConnection(fullURI);
-            LOG.trace("SQL connection obtained.");
-            Statement stm = conn.createStatement();
-            if (!schemaExists(dbConfig.getActivePGSchema(), conn))
-                createSchema(dbConfig.getActivePGSchema(), conn);
-            if (!schemaExists(dbConfig.getActiveDataPGSchema(), conn))
-                createSchema(dbConfig.getActiveDataPGSchema(), conn);
-            stm.execute(String.format("SET search_path TO %s", dbConfig.getActivePGSchema()));
-            stm.close();
+            } while (conn == null);
         } catch (SQLException e) {
             LOG.error("Could not connect with " + dbURL);
             throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
@@ -550,7 +559,7 @@ public class DataBaseConnector {
                         // eigentlich wollen wir anstelle von FOR UPDATE sogar:
                         // FOR UPDATE SKIP LOCKED in PostgreSQL 9.5 <---!!
                         + Constants.IS_PROCESSED + " = FALSE " + orderCommand + " LIMIT " + limit
-                        + " FOR UPDATE) AS subquery WHERE " + joinStatement + " RETURNING " + returnColumns;
+                        + " FOR UPDATE SKIP LOCKED) AS subquery WHERE " + joinStatement + " RETURNING " + returnColumns;
                 try (ResultSet res = st.executeQuery(sql)) {
                     String[] pks = fieldConfig.getPrimaryKey();
                     while (res.next()) {
