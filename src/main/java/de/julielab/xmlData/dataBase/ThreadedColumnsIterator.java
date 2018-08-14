@@ -154,7 +154,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                             long limit, String schemaName) {
             this.limit = limit;
             closeConnection = conn == null;
-            this.conn = conn != null ? conn : dbc.getConn();
+            this.conn = conn != null ? conn : dbc.reserveConnection();
             this.resExchanger = resExchanger;
             this.fieldConfig = dbc.getFieldConfiguration(schemaName);
             statement = "SELECT " + StringUtils.join(fields, ",") + " FROM " + table + " WHERE ";
@@ -175,12 +175,8 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
-                try {
-                    if (closeConnection)
-                        conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+                if (closeConnection)
+                    dbc.releaseConnections();
             }
         }
 
@@ -258,7 +254,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             log.trace("Reading data from table {} with SQL: {}", table, selectFrom);
             try {
                 closeConnection = conn == null ? true : false;
-                this.conn = conn != null ? conn : dbc.getConn();
+                this.conn = conn != null ? conn : dbc.reserveConnection();
                 if (conn != null)
                     autoCommit = this.conn.getAutoCommit();
                 this.conn.setAutoCommit(false);// cursor doesn't work otherwise
@@ -327,12 +323,9 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             } catch (SQLException e) {
                 e.printStackTrace();
             }
-            try {
-                if (closeConnection)
-                    conn.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+            if (closeConnection)
+                dbc.releaseConnections();
+
         }
     }
 }

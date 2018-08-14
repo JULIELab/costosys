@@ -48,9 +48,11 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
     public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, List<Object[]> ids, String table, String schemaName) {
         this(dbc, null, ids, table, schemaName);
     }
+
     public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, List<Object[]> ids, String table, String whereClause, String schemaName) {
         this(dbc, null, ids, table, whereClause, schemaName);
     }
+
     // To query by PMID, uses two other threads
     public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, Connection conn, List<Object[]> ids, String table, String whereClause, String schemaName) {
         this.dbc = dbc;
@@ -230,7 +232,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         public ArrayFromDBThread(Connection conn, Exchanger<ResultSet> resExchanger, List<Object[]> keyList, String[] table,
                                  String whereClause, String[] schemaName) {
             closeConnection = conn == null;
-            this.conn = conn != null ? conn : dbc.getConn();
+            this.conn = conn != null ? conn : dbc.reserveConnection();
             this.resExchanger = resExchanger;
             keyIter = keyList.iterator();
             this.queryBuilder = new StringBuilder();
@@ -312,12 +314,8 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
-                try {
-                    if (closeConnection)
-                        conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+                if (closeConnection)
+                    dbc.releaseConnections();
             }
         }
 

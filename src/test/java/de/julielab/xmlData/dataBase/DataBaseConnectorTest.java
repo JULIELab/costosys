@@ -37,6 +37,7 @@ public class DataBaseConnectorTest {
 
     @Test
     public void testRetrieveAndMark() throws SQLException, TableSchemaMismatchException {
+        dbc.reserveConnection();
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", Constants.DEFAULT_DATA_TABLE_NAME);
         dbc.createSubsetTable("testsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
@@ -48,10 +49,12 @@ public class DataBaseConnectorTest {
         }
         List<Object[]> retrievedKeys = dbc.retrieveAndMark("testsubset", "unit-test", "localhost", "1", 2, null);
         assertEquals(0, retrievedKeys.size());
+        dbc.releaseConnections();
     }
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testStatus() throws SQLException, TableSchemaMismatchException, TableNotFoundException {
+        dbc.reserveConnection();
         dbc.createSubsetTable("statussubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
         dbc.initSubset("statussubset", Constants.DEFAULT_DATA_TABLE_NAME);
         int bs = dbc.getQueryBatchSize();
@@ -62,24 +65,26 @@ public class DataBaseConnectorTest {
         assertThat(status.inProcess).isEqualTo(2);
         assertThat(status.pipelineStates).containsKeys("testcomponent").extracting("testcomponent").contains(2L);
         dbc.setQueryBatchSize(2);
+        dbc.releaseConnections();
     }
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testRandomSubset() throws SQLException {
+        Connection conn = dbc.reserveConnection();
         dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
         dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
-        Connection conn = dbc.getConn();
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM randomsubset");
         int numrows = 0;
         while (rs.next()) {
             numrows++;
         }
         assertThat(numrows).isEqualTo(10);
-        conn.close();
+        dbc.releaseConnections();
     }
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testQuerySubset() throws SQLException {
+        dbc.reserveConnection();
         dbc.createSubsetTable("querysubset", Constants.DEFAULT_DATA_TABLE_NAME, "");
         dbc.initSubset("querysubset", Constants.DEFAULT_DATA_TABLE_NAME);
         assertThat(dbc.getNumRows("querysubset")).isGreaterThan(0);
@@ -90,10 +95,12 @@ public class DataBaseConnectorTest {
             retrieved.add(new String(next[0]));
         }
         assertThat(retrieved).hasSize(10);
+        dbc.releaseConnections();
     }
 
     @Test
     public void testXmlData() throws SQLException, UnsupportedEncodingException {
+        dbc.reserveConnection();
         dbc.createTable("myxmltest", "xmi_text","XML Test Table");
         Map<String, Object> row = new HashMap<>();
         row.put("docid", "doc1");
@@ -103,5 +110,6 @@ public class DataBaseConnectorTest {
         byte[][] next = dbcIterator.next();
         assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
         assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
+        dbc.releaseConnections();
     }
 }
