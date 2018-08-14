@@ -94,6 +94,7 @@ public class DataBaseConnector {
     private static final int RETRIEVE_MARK_LIMIT = 1000;
     private static final int ID_SUBLIST_SIZE = 1000;
     private static final Map<String, HikariDataSource> pools = new ConcurrentHashMap<>();
+    private static final Map<Thread, List<Connection>> connectionAssignments = new ConcurrentHashMap();
 
     /**
      * A set of field definitions read from a configuration XML file. Contains the
@@ -874,11 +875,12 @@ public class DataBaseConnector {
      * table).
      * @throws IllegalArgumentException When <code>referencingTable</code> is <code>null</code>.
      */
-    public String getReferencedTable(Connection conn, String referencingTable) {
+    public String getReferencedTable(String referencingTable) {
         if (referencingTable == null)
             throw new IllegalArgumentException("Name of referencing table may not be null.");
 
         String referencedTable = null;
+        Connection conn = getConn();
         try {
             String pgSchema = dbConfig.getActivePGSchema();
             String tableName = referencingTable;
@@ -897,6 +899,12 @@ public class DataBaseConnector {
             }
         } catch (SQLException e1) {
             e1.printStackTrace();
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
         return referencedTable;
     }
@@ -943,14 +951,11 @@ public class DataBaseConnector {
      * Creates a new table according to the field schema definition corresponding to
      * the active schema name determined in the configuration.
      *
-     *
-     * @param conn
      * @param tableName the name of the new table
-     * @param columns
      * @throws SQLException
      */
-    public void createTable(Connection conn, String tableName, ArrayList<String> columns, String comment) throws SQLException {
-        createTable(conn, tableName, activeTableSchema, comment);
+    public void createTable(String tableName, String comment) throws SQLException {
+        createTable(tableName, activeTableSchema, comment);
     }
 
     /**
@@ -960,19 +965,19 @@ public class DataBaseConnector {
      * @param tableName the name of the new table
      * @throws SQLException
      */
-    public void createTable(Connection conn, String tableName, String schemaName, String comment) throws SQLException {
+    public void createTable(String tableName, String schemaName, String comment) throws SQLException {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         ArrayList<String> columns = getTableCreationColumns(tableName, fieldConfig);
 
-        createTable(conn, tableName, columns, comment);
+        createTable(tableName, columns, comment);
 
         // additionally, restrict the primary key to be unique
         // (I don't know why this is necessary, but it is required
         // for a referencing table which references several columns,
         // that these columns own a UNIQUE constraint.)
         if (fieldConfig.getPrimaryKey().length > 0)
-            alterTable(conn, String.format("ADD CONSTRAINT %s_unique UNIQUE (%s)", tableName.replace(".", ""),
+            alterTable(String.format("ADD CONSTRAINT %s_unique UNIQUE (%s)", tableName.replace(".", ""),
                     fieldConfig.getPrimaryKeyString()), tableName);
     }
 
@@ -997,7 +1002,7 @@ public class DataBaseConnector {
      * @param comment            A comment for the new table.
      * @throws SQLException
      */
-    public void createTable(Connection conn, String tableName, String referenceTableName, String schemaName, String comment)
+    public void createTable(String tableName, String referenceTableName, String schemaName, String comment)
             throws SQLException {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
@@ -1005,14 +1010,14 @@ public class DataBaseConnector {
         columns.add(String.format("CONSTRAINT %s_fkey FOREIGN KEY (%s) REFERENCES %s ON DELETE CASCADE",
                 tableName.replace(".", ""), fieldConfig.getPrimaryKeyString(), referenceTableName));
 
-        createTable(conn, tableName, columns, comment);
+        createTable(tableName, columns, comment);
 
         // additionally, restrict the primary key to be unique
         // (I don't know why this is necessary, but it is required
         // for a referencing table which references several columns,
         // that these columns own a UNIQUE constraint.)
         if (fieldConfig.getPrimaryKey().length > 0)
-            alterTable(conn, String.format("ADD CONSTRAINT %s_unique UNIQUE (%s)", tableName.replace(".", ""),
+            alterTable(String.format("ADD CONSTRAINT %s_unique UNIQUE (%s)", tableName.replace(".", ""),
                     fieldConfig.getPrimaryKeyString()), tableName);
     }
 
@@ -1088,14 +1093,14 @@ public class DataBaseConnector {
      *                         reproducable
      * @throws SQLException
      */
-    public void createSubsetTable(Connection conn, String subsetTable, String supersetTable, Integer maxNumberRefHops, String comment)
+    public void createSubsetTable(String subsetTable, String supersetTable, Integer maxNumberRefHops, String comment)
             throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, maxNumberRefHops, comment, activeTableSchema);
+        createSubsetTable(subsetTable, supersetTable, maxNumberRefHops, comment, activeTableSchema);
     }
 
     /**
      * <p>
-     * Does the same as {@link #createSubsetTable(Connection, String, String, Integer, String, String)}
+     * Does the same as {@link #createSubsetTable(String, String, Integer, String, String)}
      * with the exception that the assumed table schema is that of the active schema
      * defined in the configuration file and the first referenced data table is used as data table.
      * </p>
@@ -1106,8 +1111,8 @@ public class DataBaseConnector {
      *                      reproducable
      * @throws SQLException
      */
-    public void createSubsetTable(Connection conn, String subsetTable, String supersetTable, String comment) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, null, comment, activeTableSchema);
+    public void createSubsetTable(String subsetTable, String supersetTable, String comment) throws SQLException {
+        createSubsetTable(subsetTable, supersetTable, null, comment, activeTableSchema);
     }
 
     /**
@@ -1181,11 +1186,11 @@ public class DataBaseConnector {
      *                       reproducable
      * @throws SQLException
      */
-    public void createSubsetTable(Connection conn, String subsetTable, String supersetTable, Integer posOfDataTable, String comment,
+    public void createSubsetTable(String subsetTable, String supersetTable, Integer posOfDataTable, String comment,
                                   String schemaName) throws SQLException {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        String effectiveDataTable = getReferencedTable(conn, supersetTable, posOfDataTable);
+        String effectiveDataTable = getReferencedTable(supersetTable, posOfDataTable);
 
         ArrayList<String> columns = new ArrayList<String>();
         List<Map<String, String>> fields = fieldConfig.getFields();
@@ -1205,8 +1210,8 @@ public class DataBaseConnector {
         columns.add(String.format("CONSTRAINT %s_pkey PRIMARY KEY (%s)", subsetTable.replace(".", ""), pkStr));
         columns.add(String.format("CONSTRAINT %s_fkey FOREIGN KEY (%s) REFERENCES %s ON DELETE CASCADE",
                 subsetTable.replace(".", ""), pkStr, effectiveDataTable));
-        createTable(conn,subsetTable, columns, comment);
-        createIndex(conn, subsetTable, Constants.IS_PROCESSED, Constants.IN_PROCESS);
+        createTable(subsetTable, columns, comment);
+        createIndex(subsetTable, Constants.IS_PROCESSED, Constants.IN_PROCESS);
     }
 
     /**
@@ -1219,10 +1224,12 @@ public class DataBaseConnector {
      * @param columns The columns the index should cover.
      * @throws SQLException In case something goes wrong.
      */
-    public void createIndex(Connection conn, String table, String... columns) throws SQLException {
+    public void createIndex(String table, String... columns) throws SQLException {
+        Connection conn = getConn();
         String sql = String.format("CREATE INDEX %s_idx ON %s (%s)", table.replace(".", ""), table,
                 String.join(",", columns));
         conn.createStatement().execute(sql);
+        conn.close();
     }
 
     /**
@@ -1235,7 +1242,7 @@ public class DataBaseConnector {
      * @return
      * @throws SQLException
      */
-    public String getReferencedTable(Connection conn, String startTable, Integer posOfDataTable) throws SQLException {
+    public String getReferencedTable(String startTable, Integer posOfDataTable) throws SQLException {
         if (posOfDataTable == null)
             posOfDataTable = 1;
         int currentDatatablePosition = isDataTable(startTable) ? 1 : 0;
@@ -1254,7 +1261,7 @@ public class DataBaseConnector {
             }
             blacklist.add(effectiveDataTable);
             lasttable = effectiveDataTable;
-            effectiveDataTable = getNextDataTable(conn, effectiveDataTable);
+            effectiveDataTable = getNextDataTable(effectiveDataTable);
             currentDatatablePosition++;
         }
         return effectiveDataTable;
@@ -1270,10 +1277,10 @@ public class DataBaseConnector {
      * @return The found data table or <code>null</code>, if <code>referencingTable</code> is a data table itself.
      * @throws SQLException If table meta data checking fails.
      */
-    public String getNextDataTable(Connection conn, String referencingTable) throws SQLException {
-        String referencedTable = getReferencedTable(conn, referencingTable);
+    public String getNextDataTable(String referencingTable) throws SQLException {
+        String referencedTable = getReferencedTable(referencingTable);
         while (isSubsetTable(referencedTable)) {
-            referencedTable = getReferencedTable(conn, referencedTable);
+            referencedTable = getReferencedTable(referencedTable);
         }
         return referencedTable;
     }
@@ -1287,10 +1294,10 @@ public class DataBaseConnector {
      * @return The first data table on the foreign-key path beginning with <code>referencingTable</code> itself.
      * @throws SQLException If a database operation fails.
      */
-    public String getNextOrThisDataTable(Connection conn, String referencingTable) throws SQLException {
+    public String getNextOrThisDataTable(String referencingTable) throws SQLException {
         if (isDataTable(referencingTable))
             return referencingTable;
-        return getNextDataTable(conn, referencingTable);
+        return getNextDataTable(referencingTable);
     }
 
     /**
@@ -1478,12 +1485,12 @@ public class DataBaseConnector {
      * @param supersetTable
      * @param comment
      * @throws SQLException
-     * @see #initRandomSubset(Connection, int, String, String)
+     * @see #initRandomSubset(int, String, String)
      */
-    public void defineRandomSubset(Connection conn, int size, String subsetTable, String supersetTable, String comment)
+    public void defineRandomSubset(int size, String subsetTable, String supersetTable, String comment)
             throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, comment);
-        initRandomSubset(conn, size, subsetTable, supersetTable);
+        createSubsetTable(subsetTable, supersetTable, comment);
+        initRandomSubset(size, subsetTable, supersetTable);
     }
 
     /**
@@ -1498,12 +1505,12 @@ public class DataBaseConnector {
      * @param comment
      * @param schemaName
      * @throws SQLException
-     * @see #initRandomSubset(Connection, int, String, String, String)
+     * @see #initRandomSubset(int, String, String, String)
      */
-    public void defineRandomSubset(Connection conn, int size, String subsetTable, String supersetTable, String comment,
+    public void defineRandomSubset(int size, String subsetTable, String supersetTable, String comment,
                                    String schemaName) throws SQLException {
-        createSubsetTable(conn,subsetTable, supersetTable, null, schemaName, comment);
-        initRandomSubset(conn, size, subsetTable, supersetTable, schemaName);
+        createSubsetTable(subsetTable, supersetTable, null, schemaName, comment);
+        initRandomSubset(size, subsetTable, supersetTable, schemaName);
     }
 
     /**
@@ -1520,10 +1527,10 @@ public class DataBaseConnector {
      * @throws SQLException
      * @see #initSubset(List, String, String, String)
      */
-    public void defineSubset(Connection conn, List<String> values, String subsetTable, String supersetTable, String columnToTest,
+    public void defineSubset(List<String> values, String subsetTable, String supersetTable, String columnToTest,
                              String comment) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, comment);
-        initSubset(conn, values, subsetTable, supersetTable, columnToTest);
+        createSubsetTable(subsetTable, supersetTable, comment);
+        initSubset(values, subsetTable, supersetTable, columnToTest);
     }
 
     /**
@@ -1539,12 +1546,12 @@ public class DataBaseConnector {
      * @param comment
      * @param schemaName
      * @throws SQLException
-     * @see #initSubset(Connection, List, String, String, String, String)
+     * @see #initSubset(List, String, String, String, String)
      */
-    public void defineSubset(Connection conn, List<String> values, String subsetTable, String supersetTable, String columnToTest,
+    public void defineSubset(List<String> values, String subsetTable, String supersetTable, String columnToTest,
                              String comment, String schemaName) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, null, comment, schemaName);
-        initSubset(conn, values, subsetTable, supersetTable, columnToTest, schemaName);
+        createSubsetTable(subsetTable, supersetTable, null, comment, schemaName);
+        initSubset(values, subsetTable, supersetTable, columnToTest, schemaName);
     }
 
     /**
@@ -1557,11 +1564,11 @@ public class DataBaseConnector {
      * @param supersetTable
      * @param comment
      * @throws SQLException
-     * @see #initSubset(Connection, String, String)
+     * @see #initSubset(String, String)
      */
-    public void defineSubset(Connection conn, String subsetTable, String supersetTable, String comment) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, comment);
-        initSubset(conn, subsetTable, supersetTable);
+    public void defineSubset(String subsetTable, String supersetTable, String comment) throws SQLException {
+        createSubsetTable(subsetTable, supersetTable, comment);
+        initSubset(subsetTable, supersetTable);
     }
 
     /**
@@ -1575,12 +1582,12 @@ public class DataBaseConnector {
      * @param comment
      * @param schemaName
      * @throws SQLException
-     * @see #initSubset(Connection, List, String, String, String, String)
+     * @see #initSubset(List, String, String, String, String)
      */
-    public void defineSubset(Connection conn, String subsetTable, String supersetTable, String comment, String schemaName)
+    public void defineSubset(String subsetTable, String supersetTable, String comment, String schemaName)
             throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, null, comment, schemaName);
-        initSubset(conn, subsetTable, supersetTable, schemaName);
+        createSubsetTable(subsetTable, supersetTable, null, comment, schemaName);
+        initSubset(subsetTable, supersetTable, schemaName);
     }
 
     /**
@@ -1594,12 +1601,12 @@ public class DataBaseConnector {
      * @param conditionToCheck
      * @param comment
      * @throws SQLException
-     * @see #initSubsetWithWhereClause(Connection, String, String, String)
+     * @see #initSubsetWithWhereClause(String, String, String)
      */
-    public void defineSubsetWithWhereClause(Connection conn, String subsetTable, String supersetTable, String conditionToCheck,
+    public void defineSubsetWithWhereClause(String subsetTable, String supersetTable, String conditionToCheck,
                                             String comment) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, comment);
-        initSubsetWithWhereClause(conn, subsetTable, supersetTable, conditionToCheck);
+        createSubsetTable(subsetTable, supersetTable, comment);
+        initSubsetWithWhereClause(subsetTable, supersetTable, conditionToCheck);
     }
 
     /**
@@ -1614,12 +1621,12 @@ public class DataBaseConnector {
      * @param comment
      * @param schemaName
      * @throws SQLException
-     * @see #initSubsetWithWhereClause(Connection, String, String, String, String)
+     * @see #initSubsetWithWhereClause(String, String, String, String)
      */
-    public void defineSubsetWithWhereClause(Connection conn, String subsetTable, String supersetTable, String conditionToCheck,
+    public void defineSubsetWithWhereClause(String subsetTable, String supersetTable, String conditionToCheck,
                                             String comment, String schemaName) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, null, comment, schemaName);
-        initSubsetWithWhereClause(conn, subsetTable, supersetTable, conditionToCheck, schemaName);
+        createSubsetTable(subsetTable, supersetTable, null, comment, schemaName);
+        initSubsetWithWhereClause(subsetTable, supersetTable, conditionToCheck, schemaName);
     }
 
     /**
@@ -1633,10 +1640,10 @@ public class DataBaseConnector {
      * @param comment
      * @throws SQLException
      */
-    public void defineMirrorSubset(Connection conn, String subsetTable, String supersetTable, boolean performUpdate, String comment)
+    public void defineMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate, String comment)
             throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, comment);
-        initMirrorSubset(conn, subsetTable, supersetTable, performUpdate);
+        createSubsetTable(subsetTable, supersetTable, comment);
+        initMirrorSubset(subsetTable, supersetTable, performUpdate);
     }
 
     /**
@@ -1651,12 +1658,12 @@ public class DataBaseConnector {
      *                         table may be followed
      * @param comment
      * @throws SQLException
-     * @see #createSubsetTable(Connection, String, String, Integer, String)
+     * @see #createSubsetTable(String, String, Integer, String)
      */
-    public void defineMirrorSubset(Connection conn, String subsetTable, String supersetTable, boolean performUpdate,
+    public void defineMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate,
                                    Integer maxNumberRefHops, String comment) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, maxNumberRefHops, comment);
-        initMirrorSubset(conn, subsetTable, supersetTable, performUpdate);
+        createSubsetTable(subsetTable, supersetTable, maxNumberRefHops, comment);
+        initMirrorSubset(subsetTable, supersetTable, performUpdate);
     }
 
     /**
@@ -1671,17 +1678,17 @@ public class DataBaseConnector {
      * @param schemaName
      * @throws SQLException
      */
-    public void defineMirrorSubset(Connection conn, String subsetTable, String supersetTable, boolean performUpdate, String comment,
+    public void defineMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate, String comment,
                                    String schemaName) throws SQLException {
-        createSubsetTable(conn, subsetTable, supersetTable, null, comment, schemaName);
-        initMirrorSubset(conn, subsetTable, supersetTable, performUpdate, schemaName);
+        createSubsetTable(subsetTable, supersetTable, null, comment, schemaName);
+        initMirrorSubset(subsetTable, supersetTable, performUpdate, schemaName);
     }
 
     /**
-     * @see #initRandomSubset(Connection,int, String, String, String)
+     * @see #initRandomSubset(int, String, String, String)
      */
-    public void initRandomSubset(Connection conn, int size, String subsetTable, String supersetTable) {
-        initRandomSubset(conn, size, subsetTable, supersetTable, activeTableSchema);
+    public void initRandomSubset(int size, String subsetTable, String supersetTable) {
+        initRandomSubset(size, subsetTable, supersetTable, activeTableSchema);
     }
 
     /**
@@ -1695,8 +1702,9 @@ public class DataBaseConnector {
      * @param superSetTable name of the table to choose from
      * @param schemaName    name of the schema to use
      */
-    public void initRandomSubset(Connection conn, int size, String subsetTable, String superSetTable, String schemaName) {
+    public void initRandomSubset(int size, String subsetTable, String superSetTable, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
+        Connection conn = getConn();
         String sql = "INSERT INTO " + subsetTable + " (SELECT %s FROM " + superSetTable + " ORDER BY RANDOM() LIMIT "
                 + size + ");";
         sql = String.format(sql, fieldConfig.getPrimaryKeyString());
@@ -1705,6 +1713,12 @@ public class DataBaseConnector {
         } catch (SQLException e) {
             LOG.error(sql);
             e.printStackTrace();
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -1723,8 +1737,8 @@ public class DataBaseConnector {
      * @param supersetTable name of table to reference
      * @param columnToTest  column to check for value
      */
-    public void initSubset(Connection conn, List<String> values, String subsetTable, String supersetTable, String columnToTest) {
-        initSubset(conn, values, subsetTable, supersetTable, columnToTest, activeTableSchema);
+    public void initSubset(List<String> values, String subsetTable, String supersetTable, String columnToTest) {
+        initSubset(values, subsetTable, supersetTable, columnToTest, activeTableSchema);
     }
 
     /**
@@ -1738,11 +1752,12 @@ public class DataBaseConnector {
      * @param schemaName    schema to use
      * @param columnToTest  column to check for value
      */
-    public void initSubset(Connection conn, List<String> values, String subsetTable, String supersetTable, String columnToTest,
+    public void initSubset(List<String> values, String subsetTable, String supersetTable, String columnToTest,
                            String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         int idSize = values.size();
+        Connection conn = getConn();
         Statement st;
         String sql = null;
         try {
@@ -1763,6 +1778,12 @@ public class DataBaseConnector {
         } catch (SQLException e) {
             LOG.error("SQLError while initializing subset {}. SQL query was: {}", subsetTable, sql);
             e.printStackTrace();
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -1771,10 +1792,10 @@ public class DataBaseConnector {
      *
      * @param subsetTable
      * @param supersetTable
-     * @see #initSubset(Connection, String, String, String)
+     * @see #initSubset(String, String, String)
      */
-    public void initSubset(Connection conn, String subsetTable, String supersetTable) {
-        initSubset(conn, subsetTable, supersetTable, activeTableSchema);
+    public void initSubset(String subsetTable, String supersetTable) {
+        initSubset(subsetTable, supersetTable, activeTableSchema);
     }
 
     /**
@@ -1785,13 +1806,14 @@ public class DataBaseConnector {
      * @param supersetTable name of table to reference
      * @param schemaName    name of the schema used to determine the primary keys
      */
-    public void initSubset(Connection conn, String subsetTable, String supersetTable, String schemaName) {
+    public void initSubset(String subsetTable, String supersetTable, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         if (fieldConfig.getPrimaryKey().length == 0)
             throw new IllegalStateException("Not subset tables corresponding to table scheme \"" + fieldConfig.getName()
                     + "\" can be created since this scheme does not define a primary key.");
 
+        Connection conn = getConn();
         try {
             String pkStr = fieldConfig.getPrimaryKeyString();
 
@@ -1801,6 +1823,12 @@ public class DataBaseConnector {
             st.execute(stStr);
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -1812,10 +1840,10 @@ public class DataBaseConnector {
      * @param subsetTable   name of the subset table
      * @param supersetTable name of table to reference
      * @param whereClause   condition to check by a SQL WHERE clause, e.g. 'foo > 10'
-     * @see #initSubsetWithWhereClause(Connection, String, String, String, String)
+     * @see #initSubsetWithWhereClause(String, String, String, String)
      */
-    public void initSubsetWithWhereClause(Connection conn, String subsetTable, String supersetTable, String whereClause) {
-        initSubsetWithWhereClause(conn, subsetTable, supersetTable, whereClause, activeTableSchema);
+    public void initSubsetWithWhereClause(String subsetTable, String supersetTable, String whereClause) {
+        initSubsetWithWhereClause(subsetTable, supersetTable, whereClause, activeTableSchema);
     }
 
     /**
@@ -1828,10 +1856,11 @@ public class DataBaseConnector {
      * @param schemaName    name of the schema used to determine the primary keys
      * @param whereClause   condition to check by a SQL WHERE clause, e.g. 'foo > 10'
      */
-    public void initSubsetWithWhereClause(Connection conn, String subsetTable, String supersetTable, String whereClause,
+    public void initSubsetWithWhereClause(String subsetTable, String supersetTable, String whereClause,
                                           String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
+        Connection conn = getConn();
         String stStr = null;
         try {
             if (!whereClause.toUpperCase().startsWith("WHERE"))
@@ -1846,11 +1875,17 @@ public class DataBaseConnector {
         } catch (SQLException e) {
             LOG.error(stStr);
             e.printStackTrace();
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
-    public void initMirrorSubset(Connection conn, String subsetTable, String supersetTable, boolean performUpdate) throws SQLException {
-        initMirrorSubset(conn, subsetTable, supersetTable, performUpdate, activeTableSchema);
+    public void initMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate) throws SQLException {
+        initMirrorSubset(subsetTable, supersetTable, performUpdate, activeTableSchema);
     }
 
     /**
@@ -1863,7 +1898,7 @@ public class DataBaseConnector {
      * @param supersetTable name of table to reference
      * @throws SQLException
      */
-    public void initMirrorSubset(Connection conn, String subsetTable, String supersetTable, boolean performUpdate, String schemaName)
+    public void initMirrorSubset(String subsetTable, String supersetTable, boolean performUpdate, String schemaName)
             throws SQLException {
         // TODO if the supersetTable is actually a subset table, we must
         // determine the correct schema of the data table which will eventually
@@ -1889,7 +1924,8 @@ public class DataBaseConnector {
         }
         // Create the actual subset and fill it to contain all primary key
         // values of the data table.
-        initSubset(conn, subsetTable, supersetTable, schemaName);
+        initSubset(subsetTable, supersetTable, schemaName);
+        Connection conn = getConn();
 
         // Add the new subset table to the list of mirror subset tables.
         String sql = null;
@@ -1900,6 +1936,12 @@ public class DataBaseConnector {
             st.execute(sql);
         } catch (SQLException e) {
             LOG.error("Error executing SQL command: " + sql, e);
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -1932,7 +1974,7 @@ public class DataBaseConnector {
             while (rs.next()) {
                 String mirrorTable = rs.getString(1);
                 Boolean performUpdate = rs.getBoolean(2);
-                String refDataTable = getReferencedTable(conn, mirrorTable);
+                String refDataTable = getReferencedTable(mirrorTable);
                 if (refDataTable != null && refDataTable.equals(tableName))
                     mirrorSubsetList.put(mirrorTable, performUpdate);
             }
@@ -2798,14 +2840,22 @@ public class DataBaseConnector {
      * @param action    - SQL fragment, specifiying how to alter the table
      * @param tableName - table to alter
      */
-    private void alterTable(Connection conn, String action, String tableName) {
+    private void alterTable(String action, String tableName) {
+        Connection conn = getConn();
         String sqlString = "ALTER TABLE " + tableName + " " + action;
         try {
             Statement st = conn.createStatement();
             st.execute(sqlString);
         } catch (SQLException e) {
             e.printStackTrace();
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
+
     }
 
     /**
@@ -2962,15 +3012,12 @@ public class DataBaseConnector {
      * {@link #queryDataTable(String, String, String)}.
      * </p>
      *
-     *
-     * @param conn
-     * @param name
      * @param tableName      Name of a data table.
      * @param whereCondition Optional additional specifications for the SQL "SELECT" statement.
      * @see #queryDataTable(String, String, String)
      */
-    public DBCIterator<byte[][]> queryDataTable(Connection conn, String name, String tableName, String whereCondition) {
-        return queryDataTable(conn, tableName, whereCondition, activeTableSchema);
+    public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition) {
+        return queryDataTable(tableName, whereCondition, activeTableSchema);
     }
 
     /**
@@ -3164,8 +3211,7 @@ public class DataBaseConnector {
             throw new IllegalArgumentException("Table \"" + tableName + "\" does not exist.");
 
         final FieldConfig fieldConfig = fieldConfigs.get(schemaName);
-        final Connection conn = getConn();
-        final String dataTable = getReferencedTable(conn, tableName, numberRefHops);
+        final String dataTable = getReferencedTable(tableName, numberRefHops);
         if (dataTable.equals(tableName)) {
             String newWhereClause = whereClause;
             if (newWhereClause == null && limitParam > 0)
@@ -3176,9 +3222,10 @@ public class DataBaseConnector {
             // it corresponding to the limit parameter.
             if (limitParam > 0 && !newWhereClause.toLowerCase().matches(".*limit +[0-9]+.*"))
                 newWhereClause += " LIMIT " + limitParam;
-            return queryDataTable(conn, tableName, newWhereClause, schemaName);
+            return queryDataTable(tableName, newWhereClause, schemaName);
         }
 
+        final Connection conn = getConn();
         try {
             // We will set the key-retrieval-statement below to cursor mode by
             // specifying a maximum number of rows to return; for this to work,
@@ -3531,53 +3578,50 @@ public class DataBaseConnector {
         // "int4". This could be treated, for the moment
         // only the names will be checked.
         String tableType;
-        Connection conn = null;
-        try {
-            conn = getConn();
-            if (getReferencedTable(conn, tableName) == null) { // dataTable, check all
-                tableType = "data";
-                // columns
-                actualColumns = new ArrayList<>(getTableDefinition(tableName));
-                for (Map<String, String> m : fieldConfig.getFields())
+        if (getReferencedTable(tableName) == null) { // dataTable, check all
+            tableType = "data";
+            // columns
+            actualColumns = new ArrayList<>(getTableDefinition(tableName));
+            for (Map<String, String> m : fieldConfig.getFields())
+                // definedColumns.add(m.get("name") + " " + m.get("type"));
+                definedColumns.add(m.get(JulieXMLConstants.NAME));
+
+        } else { // subset table, check only pk-columns
+            tableType = "subset";
+            for (Map<String, String> m : fieldConfig.getFields())
+                if (new Boolean(m.get(JulieXMLConstants.PRIMARY_KEY)))
                     // definedColumns.add(m.get("name") + " " + m.get("type"));
-                    definedColumns.add(m.get(JulieXMLConstants.NAME));
+                    definedColumns.add(m.get("name"));
 
-            } else { // subset table, check only pk-columns
-                tableType = "subset";
-                for (Map<String, String> m : fieldConfig.getFields())
-                    if (new Boolean(m.get(JulieXMLConstants.PRIMARY_KEY)))
-                        // definedColumns.add(m.get("name") + " " + m.get("type"));
-                        definedColumns.add(m.get("name"));
+            // getting pk-names and types
+            String schema;
+            if (tableName.contains(".")) {
+                schema = tableName.split("\\.")[0];
+                tableName = tableName.split("\\.")[1];
+            } else
+                schema = dbConfig.getActivePGSchema();
 
-                // getting pk-names and types
-                String schema;
-                if (tableName.contains(".")) {
-                    schema = tableName.split("\\.")[0];
-                    tableName = tableName.split("\\.")[1];
-                } else
-                    schema = dbConfig.getActivePGSchema();
-
-                HashSet<String> pkNames = new HashSet<String>();
+            HashSet<String> pkNames = new HashSet<String>();
+            Connection conn = getConn();
+            try {
+                ResultSet res = conn.getMetaData().getImportedKeys("", schema, tableName);
+                while (res.next())
+                    pkNames.add(res.getString("FKCOLUMN_NAME"));
+                res = conn.getMetaData().getColumns(null, schema, tableName, null);
+                while (res.next()) {
+                    if (pkNames.contains(res.getString("COLUMN_NAME")))
+                        // actualColumns.add(res.getString("COLUMN_NAME") + " "
+                        // + res.getString("TYPE_NAME"));
+                        actualColumns.add(res.getString("COLUMN_NAME"));
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            } finally {
                 try {
-                    ResultSet res = conn.getMetaData().getImportedKeys("", schema, tableName);
-                    while (res.next())
-                        pkNames.add(res.getString("FKCOLUMN_NAME"));
-                    res = conn.getMetaData().getColumns(null, schema, tableName, null);
-                    while (res.next()) {
-                        if (pkNames.contains(res.getString("COLUMN_NAME")))
-                            // actualColumns.add(res.getString("COLUMN_NAME") + " "
-                            // + res.getString("TYPE_NAME"));
-                            actualColumns.add(res.getString("COLUMN_NAME"));
-                    }
+                    conn.close();
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
-            }
-        } finally {
-            try {
-                conn.close();
-            } catch (SQLException e) {
-                LOG.error("Could not close database connection", e);
             }
         }
         Collections.sort(definedColumns);
@@ -3875,6 +3919,73 @@ public class DataBaseConnector {
         }
     }
 
+    /**
+     * Returns the connection associated with the current thread object. To release used connections back to the connection pool, call {@link #releaseConnections()}.
+     *
+     * @return A connection associated with the current thread.
+     * @throws IllegalStateException If there are no reserved connections for the current thread.
+     * @see #reserveConnection()
+     * @see #releaseConnections()
+     */
+    public Connection obtainConnection() {
+        Thread currentThread = Thread.currentThread();
+        List<Connection> list = connectionAssignments.compute(currentThread, (t, l) -> {
+            List<Connection> ret = l;
+            if (ret == null) ret = new ArrayList<>();
+            return ret;
+        });
+        if (list.isEmpty())
+            throw new IllegalStateException("There are not reserved connection for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
+        // Currently, we only can have a single connection per thread. More might required in the future perhaps.
+        return list.get(0);
+    }
+
+    /**
+     * Reserves a connection for the current thread. This is required by many internal methods that need a database
+     * connection. They will aquire it by calling {@link #obtainConnection()}. This helps in reusing the same connection
+     * for multiple tasks within a single thread. This also helps to avoid deadlocks where a single thread requests
+     * multiple connections from the connection pool in method subcalls, blocking itself.
+     * <p>
+     * Note that is possible to reserve multiple connections but that this does not have any positive effect as of now.
+     * You should always only reserve one connection per thread. After the connection is not required any more, call
+     * {@link #releaseConnections()} to free the connection.
+     * </p>
+     * @return The newly reserved connection.
+     * @see #obtainConnection()
+     * @see #releaseConnections()
+     */
+    public Connection reserveConnection() {
+        Thread currentThread = Thread.currentThread();
+        List<Connection> list = connectionAssignments.compute(currentThread, (t, l) -> {
+            List<Connection> ret = l;
+            if (ret == null) ret = new ArrayList<>();
+            return ret;
+        });
+        Connection conn = getConn();
+        if (list.size() == dbConfig.getMaxConnections())
+            throw new UnobtainableConnectionException("The current thread has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool.");
+        list.add(conn);
+        return conn;
+    }
+
+    /**
+     * Releases all connections associated with the current thread back to the connection pool.
+     * @see #reserveConnection()
+     * @see #obtainConnection()
+     */
+    public void releaseConnections() {
+        Thread currentThread = Thread.currentThread();
+        List<Connection> connectionList = connectionAssignments.getOrDefault(currentThread, Collections.emptyList());
+        for (Connection conn : connectionList) {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                LOG.error("Could not release connection back to the pool", e);
+            }
+        }
+        connectionList.clear();
+    }
+
     public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}
 
     /**
@@ -3915,4 +4026,5 @@ public class DataBaseConnector {
         }
 
     }
+
 }
