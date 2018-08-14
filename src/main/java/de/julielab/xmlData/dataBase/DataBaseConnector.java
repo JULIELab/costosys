@@ -381,10 +381,29 @@ public class DataBaseConnector {
                     stm.close();
                 } catch (SQLException e) {
                     LOG.warn("Could not obtain a database connection within the timeout. Trying again. Number of try: {}", ++retries);
-                    if (retries == 3)
+                    MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                    try {
+                        String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
+                        ObjectName poolName = new ObjectName("com.zaxxer.hikari:type=Pool (" + poolNameStr + ")");
+                        HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
+                        int totalConnections = poolProxy.getTotalConnections();
+                        int idleConnections = poolProxy.getIdleConnections();
+                        int activeConnections = poolProxy.getActiveConnections();
+                        int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
+                        LOG.warn("Pool {} has {} total connections", poolName, totalConnections);
+                        LOG.warn("Pool {} has {} idle connections left", poolName, idleConnections);
+                        LOG.warn("Pool {} has {} active connections", poolName, activeConnections);
+                        LOG.warn("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
+
+                    } catch (MalformedObjectNameException e1) {
+                        e1.printStackTrace();
+                    }
+                    if (retries == 900)
                         throw e;
                 }
             } while (conn == null);
+            if (retries > 0)
+                LOG.warn("It took {} retries to obtain a connection", retries);
         } catch (SQLException e) {
             LOG.error("Could not connect with " + dbURL);
             throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
