@@ -2069,8 +2069,8 @@ public class DataBaseConnector {
      * @param pkValues
      * @return
      */
-    public int[] resetSubset(String subsetTableName, List<Object[]> pkValues) {
-        return resetSubset(subsetTableName, pkValues, activeTableSchema);
+    public int[] resetSubset(Connection conn, String subsetTableName, List<Object[]> pkValues) {
+        return resetSubset(conn, subsetTableName, pkValues, activeTableSchema);
     }
 
     /**
@@ -2080,14 +2080,15 @@ public class DataBaseConnector {
      * @return
      * @see #resetSubset(String, List, String)
      */
-    public int[] performBatchUpdate(List<Object[]> pkValues, String sqlFormatString, String schemaName) {
+    public int[] performBatchUpdate(Connection conn, List<Object[]> pkValues, String sqlFormatString, String schemaName) {
 
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        Connection conn = getConn();
         String stStr = null;
         List<Integer> resultList = new ArrayList<>();
+        boolean autoCommit = true;
         try {
+            autoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             String whereArgument = StringUtils.join(fieldConfig.expandPKNames("%s = ?"), " AND ");
             stStr = String.format(sqlFormatString, whereArgument);
@@ -2122,10 +2123,9 @@ public class DataBaseConnector {
             LOG.error("Error executing SQL command: " + stStr, e);
         } finally {
             try {
-                conn.setAutoCommit(true);
-                conn.close();
+                conn.setAutoCommit(autoCommit);
             } catch (SQLException e) {
-                e.printStackTrace();
+                LOG.error("Could not set auto commit to its original value", e);
             }
         }
         int[] ret = new int[resultList.size()];
@@ -2144,7 +2144,7 @@ public class DataBaseConnector {
      * @param pkValues        - list of primary keys
      * @return
      */
-    public int[] resetSubset(String subsetTableName, List<Object[]> pkValues, String schemaName) {
+    public int[] resetSubset(Connection conn, String subsetTableName, List<Object[]> pkValues, String schemaName) {
         // We intentionally do not check whether the rows are already reset
         // because we want the only reason for the update to not affect a
         // row to be that the row doesn't exist.
@@ -2153,12 +2153,12 @@ public class DataBaseConnector {
         String updateFormatString = "UPDATE " + subsetTableName + " SET " + Constants.IS_PROCESSED + "=FALSE, "
                 + Constants.IN_PROCESS + "= FALSE, " + Constants.LAST_COMPONENT + "='" + DEFAULT_PIPELINE_STATE
                 + "' WHERE %s";
-        return performBatchUpdate(pkValues, updateFormatString, schemaName);
+        return performBatchUpdate(conn, pkValues, updateFormatString, schemaName);
     }
 
-    public int[] determineExistingSubsetRows(String subsetTableName, List<Object[]> pkValues, String schemaName) {
+    public int[] determineExistingSubsetRows(Connection conn, String subsetTableName, List<Object[]> pkValues, String schemaName) {
         String updateFormatString = "UPDATE " + subsetTableName + " SET has_errors = has_errors " + "where %s";
-        return performBatchUpdate(pkValues, updateFormatString, schemaName);
+        return performBatchUpdate(conn, pkValues, updateFormatString, schemaName);
     }
 
     /**
@@ -2564,7 +2564,7 @@ public class DataBaseConnector {
                 }
             }
             if (i > 0) {
-                LOG.trace("Commiting last batch of size {}", i);
+                LOG.trace("Committing last batch of size {}", i);
                 executeAndCommitUpdate(tableName, externalConn != null ? externalConn : conn, commit, schemaName, fieldConfig, mirrorNames,
                         mirrorStatements, ps, cache);
             }
@@ -2649,10 +2649,10 @@ public class DataBaseConnector {
                 // to know whether there are any missing rows and insert them.
                 if (mirrorNames.get(mirrorName)) {
                     LOG.trace("Resetting updated rows.");
-                    returned = resetSubset(mirrorName, toResetPKs, schemaName);
+                    returned = resetSubset(externalConn, mirrorName, toResetPKs, schemaName);
                 } else {
                     LOG.trace("Updates rows are NOT reset.");
-                    returned = determineExistingSubsetRows(mirrorName, toResetPKs, schemaName);
+                    returned = determineExistingSubsetRows(externalConn, mirrorName, toResetPKs, schemaName);
                 }
                 // Possibly some update documents don't even exist
                 // in a mirror subset. This shouldn't happen of
@@ -2683,7 +2683,6 @@ public class DataBaseConnector {
             }
         }
 
-        // commit(conn);
         if (commit) {
             LOG.trace("Committing updates.");
             externalConn.commit();
@@ -3904,6 +3903,19 @@ public class DataBaseConnector {
             ret = fieldConfigs.get(fieldConfigs.get(fieldConfigName));
         }
         return ret;
+    }
+
+    public void resetSubset(String subsetTableName, List<Object[]> pkValues) {
+        Connection conn = getConn();
+        try {
+            resetSubset(conn, subsetTableName, pkValues);
+        } finally {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                LOG.error("Could not close connection obtain for subset resetting", e);
+            }
+        }
     }
 
     public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}
