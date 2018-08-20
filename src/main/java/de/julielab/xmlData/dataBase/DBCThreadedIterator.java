@@ -66,5 +66,6 @@ public abstract class DBCThreadedIterator<E> extends DBCIterator<E> {
 	public void close() {
 	}
 
-	
+
+    public abstract void join() throws InterruptedException;
 }

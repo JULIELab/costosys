@@ -25,15 +25,17 @@ public class ThreadedColumnsIteratorTest {
     public static void setup() throws SQLException, IOException {
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
+        dbc.reserveConnection();
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", Constants.DEFAULT_DATA_TABLE_NAME);
         assertEquals(10, dbc.getNumRows(Constants.DEFAULT_DATA_TABLE_NAME));
         dbc.setQueryBatchSize(3);
+        dbc.releaseConnections();
     }
 
     @Test
     public void testIterator() throws SQLException {
-        try(Connection conn = dbc.reserveConnection()) {
+        try (Connection conn = dbc.reserveConnection()) {
             ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
             int numRetrieved = 0;
             while (it.hasNext()) {
@@ -41,14 +43,46 @@ public class ThreadedColumnsIteratorTest {
                 Arrays.toString(next);
                 numRetrieved++;
             }
-            it.closeConnection();
             assertEquals(10, numRetrieved);
         }
     }
 
     @Test
+    public void testIteratorWithoutExternalConnection() throws InterruptedException {
+        // Repeat the very same lines of code a few times to make sure that connections are released properly
+        ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
+        int numRetrieved = 0;
+        while (it.hasNext()) {
+            Object[] next = it.next();
+            Arrays.toString(next);
+            numRetrieved++;
+        }
+        assertEquals(10, numRetrieved);
+
+        it = new ThreadedColumnsIterator(dbc, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
+        numRetrieved = 0;
+        while (it.hasNext()) {
+            Object[] next = it.next();
+            Arrays.toString(next);
+            numRetrieved++;
+        }
+        assertEquals(10, numRetrieved);
+
+        it = new ThreadedColumnsIterator(dbc, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
+        numRetrieved = 0;
+        while (it.hasNext()) {
+            Object[] next = it.next();
+            Arrays.toString(next);
+            numRetrieved++;
+        }
+        assertEquals(10, numRetrieved);
+        it.join();
+        assertEquals(0, dbc.getNumReservedConnections());
+    }
+
+    @Test
     public void testIteratorWithLimit() throws SQLException {
-        try(Connection conn = dbc.reserveConnection()) {
+        try (Connection conn = dbc.reserveConnection()) {
             ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
             int numRetrieved = 0;
             while (it.hasNext()) {

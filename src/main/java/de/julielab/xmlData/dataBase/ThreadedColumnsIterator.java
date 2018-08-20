@@ -4,6 +4,7 @@ import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
 import de.julielab.xmlData.config.FieldConfig;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +65,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
     public void closeConnection() {
         backgroundThread.closeConnection();
+    }
+
+    @Override
+    public void join() throws InterruptedException{
+        ((ListFromDBThread)backgroundThread).join();
     }
 
     /**
@@ -239,13 +245,13 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     private class ListFromDBThread extends Thread implements ConnectionClosable {
         private final Logger log = LoggerFactory.getLogger(ListFromDBThread.class);
         private final List<String> fields;
+        private Pair<Connection, Boolean> connPair;
         private Boolean autoCommit;
         private Exchanger<List<Object[]>> listExchanger;
         private List<Object[]> currentList;
         private String selectFrom;
         private ResultSet res;
         private Connection conn;
-        private boolean closeConnection;
 
         public ListFromDBThread(Connection conn, Exchanger<List<Object[]>> listExchanger, List<String> fields, String table, long limit) {
             this.listExchanger = listExchanger;
@@ -253,8 +259,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             selectFrom = String.format("SELECT %s FROM %s %s", StringUtils.join(fields, ","), table, limit > 0 ? " LIMIT " + limit : "");
             log.trace("Reading data from table {} with SQL: {}", table, selectFrom);
             try {
-                closeConnection = conn == null ? true : false;
-                this.conn = conn != null ? conn : dbc.reserveConnection();
+                this.conn = conn;
+                if (conn == null) {
+                    connPair = dbc.obtainOrReserveConnection();
+                    this.conn = connPair.getLeft();
+                }
                 if (conn != null)
                     autoCommit = this.conn.getAutoCommit();
                 this.conn.setAutoCommit(false);// cursor doesn't work otherwise
@@ -284,6 +293,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             } catch (SQLException e) {
                 e.printStackTrace();
             }
+            closeConnection();
         }
 
         private boolean updateCurrentList() {
@@ -317,14 +327,25 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
         @Override
         public void closeConnection() {
+            log.debug("Closing connection");
             try {
-                if (autoCommit != null)
+                if (autoCommit != null) {
+                    log.trace("Setting auto commit back to {}", autoCommit);
                     conn.setAutoCommit(autoCommit);
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
-            if (closeConnection)
-                dbc.releaseConnections();
+            if (connPair != null) {
+                log.trace("Releasing connection pair {}", connPair);
+                if (connPair.getRight()) {
+                    try {
+                        connPair.getLeft().close();
+                    } catch (SQLException e) {
+                        log.error("Could not close connection", e);
+                    }
+                }
+            }
 
         }
     }

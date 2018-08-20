@@ -35,6 +35,19 @@ public class DataBaseConnectorTest {
         postgres.stop();
     }
 
+
+    @Test
+    public void testQueryAndExecution() {
+        dbc.withConnectionExecute(dbc -> {
+            try {
+                dbc.createTable("mytable", "Some comment");
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        });
+        boolean exists = dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mytable"));
+        assertThat(exists).isTrue();
+    }
     @Test
     public void testRetrieveAndMark() throws SQLException, TableSchemaMismatchException {
         dbc.reserveConnection();

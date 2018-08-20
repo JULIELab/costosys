@@ -97,6 +97,11 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         ((ArrayResToListThread) backgroundThread).end();
     }
 
+    @Override
+    public void join() throws InterruptedException {
+        ((ArrayResToListThread) backgroundThread).join();
+    }
+
 
     /**
      * This class converts a <tt>ResultSet</tt>, retrieved from the database, into a
@@ -314,8 +319,13 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
-                if (closeConnection)
-                    dbc.releaseConnections();
+                if (closeConnection) {
+                    try {
+                        conn.close();
+                    } catch (SQLException e) {
+                        LOG.error("Could not close connection", e);
+                    }
+                }
             }
         }
 
@@ -375,9 +385,8 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         }
 
         public void end() {
-            // The connection is closed automatically when the thread ends, see
-            // the run() method.
             end = true;
+            closeConnection();
         }
 
         @Override

@@ -1,6 +1,6 @@
 package de.julielab.xmlData.dataBase.util;
 
-public class UnobtainableConnectionException extends RuntimeException {
+public class UnobtainableConnectionException extends CoStoSysRuntimeException {
     public UnobtainableConnectionException() {
     }
 

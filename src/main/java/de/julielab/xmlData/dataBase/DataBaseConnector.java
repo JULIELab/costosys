@@ -27,6 +27,8 @@ import de.julielab.xmlData.config.ConfigReader;
 import de.julielab.xmlData.config.DBConfig;
 import de.julielab.xmlData.config.FieldConfig;
 import de.julielab.xmlData.config.FieldConfigurationManager;
+import de.julielab.xmlData.dataBase.util.CoStoSysSQLRuntimeException;
+import de.julielab.xmlData.dataBase.util.NoReservedConnectionException;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
 import de.julielab.xmlData.dataBase.util.UnobtainableConnectionException;
 import org.apache.commons.lang3.StringUtils;
@@ -46,6 +48,7 @@ import java.sql.*;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -868,7 +871,7 @@ public class DataBaseConnector {
                 referencedTable = pkTableSchema != null ? pkTableSchema + "." + pkTableName : pkTableName;
             }
         } catch (SQLException e1) {
-            e1.printStackTrace();
+            throw new CoStoSysSQLRuntimeException(e1);
         }
         return referencedTable;
     }
@@ -924,7 +927,7 @@ public class DataBaseConnector {
      * @param tableName the name of the new table
      * @throws SQLException
      */
-    public void createTable(String tableName, String schemaName, String comment) throws SQLException {
+    public void createTable(String tableName, String schemaName, String comment) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         ArrayList<String> columns = getTableCreationColumns(tableName, fieldConfig);
@@ -961,8 +964,7 @@ public class DataBaseConnector {
      * @param comment            A comment for the new table.
      * @throws SQLException
      */
-    public void createTable(String tableName, String referenceTableName, String schemaName, String comment)
-            throws SQLException {
+    public void createTable(String tableName, String referenceTableName, String schemaName, String comment) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         ArrayList<String> columns = getTableCreationColumns(tableName, fieldConfig);
@@ -1010,9 +1012,9 @@ public class DataBaseConnector {
      * @param columns   a list of Strings, each containing name, type and constraint of a
      *                  column, e.g. "foo integer primary key" as required for a valid sql
      *                  command.
-     * @throws SQLException
+     * @throws CoStoSysSQLRuntimeException If the SQL command fails.
      */
-    private void createTable(String tableName, List<String> columns, String comment) throws SQLException {
+    private void createTable(String tableName, List<String> columns, String comment) {
         Connection conn = obtainConnection();
         StringBuilder sb = new StringBuilder("CREATE TABLE " + tableName + " (");
         for (String column : columns)
@@ -1026,7 +1028,7 @@ public class DataBaseConnector {
         } catch (SQLException e) {
             System.err.println(sqlString);
             e.printStackTrace();
-            throw e;
+            throw new CoStoSysSQLRuntimeException(e);
         }
     }
 
@@ -1226,9 +1228,9 @@ public class DataBaseConnector {
      *
      * @param referencingTable The table to get the next referenced data table for, possibly across other subsets if <code>referencingTable</code> denotes a subset table..
      * @return The found data table or <code>null</code>, if <code>referencingTable</code> is a data table itself.
-     * @throws SQLException If table meta data checking fails.
+     * @throws CoStoSysSQLRuntimeException If table meta data checking fails.
      */
-    public String getNextDataTable(String referencingTable) throws SQLException {
+    public String getNextDataTable(String referencingTable) {
         String referencedTable = getReferencedTable(referencingTable);
         while (isSubsetTable(referencedTable)) {
             referencedTable = getReferencedTable(referencedTable);
@@ -1245,7 +1247,7 @@ public class DataBaseConnector {
      * @return The first data table on the foreign-key path beginning with <code>referencingTable</code> itself.
      * @throws SQLException If a database operation fails.
      */
-    public String getNextOrThisDataTable(String referencingTable) throws SQLException {
+    public String getNextOrThisDataTable(String referencingTable) {
         if (isDataTable(referencingTable))
             return referencingTable;
         return getNextDataTable(referencingTable);
@@ -1262,7 +1264,7 @@ public class DataBaseConnector {
      * @return True, iff <code>table</code> denotes a subset table, false otherwise. The latter case includes the <code>table</code> parameter being <code>null</code>.
      * @throws SQLException If table meta data checking fails.
      */
-    public boolean isSubsetTable(String table) throws SQLException {
+    public boolean isSubsetTable(String table) {
         if (table == null)
             return false;
         Connection conn = obtainConnection();
@@ -1272,19 +1274,23 @@ public class DataBaseConnector {
             pgSchema = table.replaceFirst("\\..*$", "");
             tableName = table.substring(table.indexOf('.') + 1);
         }
-        // Do lowercase on the table name: Case matters and postgres always
-        // lowercases the names on creation...
-        ResultSet columns = conn.getMetaData().getColumns(null, pgSchema, tableName.toLowerCase(), null);
-        int numSubsetColumnsFound = 0;
-        while (columns.next()) {
-            String columnName = columns.getString(4);
-            if (subsetColumns.keySet().contains(columnName))
-                numSubsetColumnsFound++;
+        try {
+            // Do lowercase on the table name: Case matters and postgres always
+            // lowercases the names on creation...
+            ResultSet columns = conn.getMetaData().getColumns(null, pgSchema, tableName.toLowerCase(), null);
+            int numSubsetColumnsFound = 0;
+            while (columns.next()) {
+                String columnName = columns.getString(4);
+                if (subsetColumns.keySet().contains(columnName))
+                    numSubsetColumnsFound++;
+            }
+            return numSubsetColumnsFound == subsetColumns.size();
+        } catch (SQLException e) {
+            throw new CoStoSysSQLRuntimeException(e);
         }
-        return numSubsetColumnsFound == subsetColumns.size();
     }
 
-    public boolean isDataTable(String table) throws SQLException {
+    public boolean isDataTable(String table) {
         return !isSubsetTable(table);
     }
 
@@ -1339,8 +1345,7 @@ public class DataBaseConnector {
      * @return true if the table exists, false otherwise
      */
     public boolean tableExists(String tableName) {
-        Connection conn = obtainConnection();
-        return tableExists(conn, tableName);
+        return tableExists(obtainConnection(), tableName);
     }
 
     /**
@@ -3412,80 +3417,89 @@ public class DataBaseConnector {
      * Note: This method currently does not check other then primary key columns for
      * tables that reference another table, even if those should actually be data
      * tables.
+     * <p>
+     * This method makes use of the {@link #obtainOrReserveConnection()} method to obtain a connection in case
+     * the current thread has not already obtained one.
+     * </p>
      *
      * @param tableName - table to check
      */
     public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException {
-        if (!tableExists(tableName))
-            throw new IllegalArgumentException("The table '" + tableName + "' does not exist.");
-        FieldConfig fieldConfig = fieldConfigs.get(schemaName);
+        Pair<Connection, Boolean> connPair = obtainOrReserveConnection();
+        try {
+            if (!tableExists(tableName))
+                throw new IllegalArgumentException("The table '" + tableName + "' does not exist.");
+            FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        List<String> actualColumns = new ArrayList<>();
-        List<String> definedColumns = new ArrayList<>();
+            List<String> actualColumns = new ArrayList<>();
+            List<String> definedColumns = new ArrayList<>();
 
-        // Postgres will convert table names to lower case but check for capital
-        // letter names all the same, thus never
-        // finding a match when giving names with capital letters.
-        tableName = tableName.toLowerCase();
+            // Postgres will convert table names to lower case but check for capital
+            // letter names all the same, thus never
+            // finding a match when giving names with capital letters.
+            tableName = tableName.toLowerCase();
 
-        // ERIK 6th of December 2013: Removed the type information because it
-        // lead to false positives: When the
-        // dbcConfiguration specifies an "integer", it actually becomes an
-        // "int4". This could be treated, for the moment
-        // only the names will be checked.
-        String tableType;
-        if (getReferencedTable(tableName) == null) { // dataTable, check all
-            tableType = "data";
-            // columns
-            actualColumns = new ArrayList<>(getTableDefinition(tableName));
-            for (Map<String, String> m : fieldConfig.getFields())
-                // definedColumns.add(m.get("name") + " " + m.get("type"));
-                definedColumns.add(m.get(JulieXMLConstants.NAME));
-
-        } else { // subset table, check only pk-columns
-            tableType = "subset";
-            for (Map<String, String> m : fieldConfig.getFields())
-                if (new Boolean(m.get(JulieXMLConstants.PRIMARY_KEY)))
+            // ERIK 6th of December 2013: Removed the type information because it
+            // lead to false positives: When the
+            // dbcConfiguration specifies an "integer", it actually becomes an
+            // "int4". This could be treated, for the moment
+            // only the names will be checked.
+            String tableType;
+            if (getReferencedTable(tableName) == null) { // dataTable, check all
+                tableType = "data";
+                // columns
+                actualColumns = new ArrayList<>(getTableDefinition(tableName));
+                for (Map<String, String> m : fieldConfig.getFields())
                     // definedColumns.add(m.get("name") + " " + m.get("type"));
-                    definedColumns.add(m.get("name"));
+                    definedColumns.add(m.get(JulieXMLConstants.NAME));
 
-            // getting pk-names and types
-            String schema;
-            if (tableName.contains(".")) {
-                schema = tableName.split("\\.")[0];
-                tableName = tableName.split("\\.")[1];
-            } else
-                schema = dbConfig.getActivePGSchema();
+            } else { // subset table, check only pk-columns
+                tableType = "subset";
+                for (Map<String, String> m : fieldConfig.getFields())
+                    if (new Boolean(m.get(JulieXMLConstants.PRIMARY_KEY)))
+                        // definedColumns.add(m.get("name") + " " + m.get("type"));
+                        definedColumns.add(m.get("name"));
 
-            HashSet<String> pkNames = new HashSet<String>();
-            Connection conn = obtainConnection();
-            try {
-                ResultSet res = conn.getMetaData().getImportedKeys("", schema, tableName);
-                while (res.next())
-                    pkNames.add(res.getString("FKCOLUMN_NAME"));
-                res = conn.getMetaData().getColumns(null, schema, tableName, null);
-                while (res.next()) {
-                    if (pkNames.contains(res.getString("COLUMN_NAME")))
-                        // actualColumns.add(res.getString("COLUMN_NAME") + " "
-                        // + res.getString("TYPE_NAME"));
-                        actualColumns.add(res.getString("COLUMN_NAME"));
+                // getting pk-names and types
+                String schema;
+                if (tableName.contains(".")) {
+                    schema = tableName.split("\\.")[0];
+                    tableName = tableName.split("\\.")[1];
+                } else
+                    schema = dbConfig.getActivePGSchema();
+
+                HashSet<String> pkNames = new HashSet<String>();
+
+                Connection conn = connPair.getLeft();
+                try {
+                    ResultSet res = conn.getMetaData().getImportedKeys("", schema, tableName);
+                    while (res.next())
+                        pkNames.add(res.getString("FKCOLUMN_NAME"));
+                    res = conn.getMetaData().getColumns(null, schema, tableName, null);
+                    while (res.next()) {
+                        if (pkNames.contains(res.getString("COLUMN_NAME")))
+                            // actualColumns.add(res.getString("COLUMN_NAME") + " "
+                            // + res.getString("TYPE_NAME"));
+                            actualColumns.add(res.getString("COLUMN_NAME"));
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
             }
-        }
-        Collections.sort(definedColumns);
-        Collections.sort(actualColumns);
-        if (!definedColumns.equals(actualColumns)) {
+            Collections.sort(definedColumns);
+            Collections.sort(actualColumns);
+            if (!definedColumns.equals(actualColumns)) {
 
-            String columnType = tableType.equals("subset") ? "primary key " : "";
-            throw new TableSchemaMismatchException("The existing " + tableType + " table \"" + tableName + "\" has the following " +
-                    columnType +
-                    "columns: \"" + StringUtils.join(actualColumns, " ") + "\". However, the CoStoSys table " +
-                    "schema \"" + schemaName + "\" that is used to operate on that table specifies a different set of " + columnType + "columns:" +
-                    StringUtils.join(definedColumns, " ") + ". The active table schema is specified in the CoStoSys XML coniguration file.");
+                String columnType = tableType.equals("subset") ? "primary key " : "";
+                throw new TableSchemaMismatchException("The existing " + tableType + " table \"" + tableName + "\" has the following " +
+                        columnType +
+                        "columns: \"" + StringUtils.join(actualColumns, " ") + "\". However, the CoStoSys table " +
+                        "schema \"" + schemaName + "\" that is used to operate on that table specifies a different set of " + columnType + "columns:" +
+                        StringUtils.join(definedColumns, " ") + ". The active table schema is specified in the CoStoSys XML coniguration file.");
+            }
+        } finally {
+            releaseConnection(connPair);
         }
-
     }
 
     /**
@@ -3620,6 +3634,7 @@ public class DataBaseConnector {
     }
 
     public void close() {
+        releaseConnections();
         LOG.debug("Shutting down DataBaseConnector, closing data source.");
         if (dataSource instanceof HikariDataSource)
             ((HikariDataSource) dataSource).close();
@@ -3760,12 +3775,30 @@ public class DataBaseConnector {
         });
         cleanClosedReservedConnections(list);
         if (list.isEmpty())
-            throw new IllegalStateException("There are not reserved connection for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
+            throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
         // Currently, we only can have a single connection per thread. More might required in the future perhaps.
         return list.get(0);
     }
 
-    public int hasReservedConnections() {
+    /**
+     * Guaranteed to return either an already reserved connection or a newly reserved one. The second value returned
+     * is a boolean that indicates whether the returned connection was newly reserved or not (<code>true</code> /
+     * <code>false</code>, respectively).
+     *
+     * @return A pair consisting of connection and the information if it was newly reserved or not.
+     */
+    public Pair<Connection, Boolean> obtainOrReserveConnection() {
+        Connection connection;
+        int reservedConnections = getNumReservedConnections();
+        if (reservedConnections == 0) {
+            connection = reserveConnection();
+        } else {
+            connection = obtainConnection();
+        }
+        return new ImmutablePair<>(connection, reservedConnections == 0);
+    }
+
+    public int getNumReservedConnections() {
         Thread currentThread = Thread.currentThread();
         List<Connection> list = connectionAssignments.getOrDefault(currentThread, Collections.emptyList());
         cleanClosedReservedConnections(list);
@@ -3814,7 +3847,7 @@ public class DataBaseConnector {
         });
         cleanClosedReservedConnections(list);
         if (list.size() == dbConfig.getMaxConnections())
-            throw new UnobtainableConnectionException("The current thread has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool.");
+            throw new UnobtainableConnectionException("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool.");
         Connection conn = getConn();
         list.add(conn);
         return conn;
@@ -3841,7 +3874,10 @@ public class DataBaseConnector {
     }
 
     /**
-     * Removes the associa
+     * Removes the given connection from the list of reserved connection of the calling thread. If the connection
+     * was not reserved by the calling thread, an <tt>IllegalArgumentException</tt> will be raised. However, it is
+     * also possible to release connections received from another thread by just closing them via {@link Connection#close()}.
+     * This should only be used intentionally, however, to avoid confusion.
      *
      * @param conn
      * @throws IllegalArgumentException If the given connection is not associated with the current thread.
@@ -3858,16 +3894,87 @@ public class DataBaseConnector {
         }
     }
 
-    public void withConnection(DatabaseCommand command) {
+    /**
+     * Releases the connection included in the passed pair if the included boolean is set to <code>true</code>.
+     * Such pairs are generated by the {@link #obtainOrReserveConnection()} method.
+     *
+     * @param connPair The connection pair where the connection should be released if the boolean part of the pair is <code>true</code>.
+     */
+    public void releaseConnection(Pair<Connection, Boolean> connPair) {
+        if (connPair.getRight())
+            releaseConnection(connPair.getLeft());
+    }
+
+    public boolean withConnectionQueryBoolean(Predicate<DataBaseConnector> command) {
         boolean close = false;
         Connection conn = null;
-        if (hasReservedConnections() > 0)
+        if (getNumReservedConnections() > 0)
             obtainConnection();
         if (conn == null) {
             conn = reserveConnection();
             close = true;
         }
-        command.execute();
+        boolean ret = command.test(this);
+        if (close)
+            releaseConnection(conn);
+        return ret;
+    }
+
+    public int withConnectionQueryInteger(Function<DataBaseConnector, Integer> command) {
+        boolean close = false;
+        Connection conn = null;
+        if (getNumReservedConnections() > 0)
+            obtainConnection();
+        if (conn == null) {
+            conn = reserveConnection();
+            close = true;
+        }
+        int ret = command.apply(this);
+        if (close)
+            releaseConnection(conn);
+        return ret;
+    }
+
+    public double withConnectionQueryDouble(Function<DataBaseConnector, Double> command) {
+        boolean close = false;
+        Connection conn = null;
+        if (getNumReservedConnections() > 0)
+            obtainConnection();
+        if (conn == null) {
+            conn = reserveConnection();
+            close = true;
+        }
+        double ret = command.apply(this);
+        if (close)
+            releaseConnection(conn);
+        return ret;
+    }
+
+    public String withConnectionQueryString(Function<DataBaseConnector, String> command) {
+        boolean close = false;
+        Connection conn = null;
+        if (getNumReservedConnections() > 0)
+            obtainConnection();
+        if (conn == null) {
+            conn = reserveConnection();
+            close = true;
+        }
+        String ret = command.apply(this);
+        if (close)
+            releaseConnection(conn);
+        return ret;
+    }
+
+    public void withConnectionExecute(Consumer<DataBaseConnector> command) {
+        boolean close = false;
+        Connection conn = null;
+        if (getNumReservedConnections() > 0)
+            obtainConnection();
+        if (conn == null) {
+            conn = reserveConnection();
+            close = true;
+        }
+        command.accept(this);
         if (close)
             releaseConnection(conn);
     }

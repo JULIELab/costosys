@@ -1,6 +1,6 @@
 package de.julielab.xmlData.dataBase.util;
 
-public class TableSchemaMismatchException extends Exception {
+public class TableSchemaMismatchException extends CoStoSysException {
     public TableSchemaMismatchException() {
     }
 
