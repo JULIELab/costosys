@@ -4,3 +4,5 @@
 /.project
 /target/
 .idea
+/src/test/resources/testconfig.xml
+/src/test/resources/hiddenconfig.txt

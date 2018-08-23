@@ -130,6 +130,12 @@
             <artifactId>postgresql</artifactId>
             <version>42.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>de.julielab</groupId>
+            <artifactId>jcore-db-test-utilities</artifactId>
+            <version>2.3.1-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <parent>

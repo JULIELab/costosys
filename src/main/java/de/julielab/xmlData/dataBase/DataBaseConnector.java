@@ -3418,8 +3418,7 @@ public class DataBaseConnector {
      * @param tableName - table to check
      */
     public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException {
-        Pair<Connection, Boolean> connPair = obtainOrReserveConnection();
-        try {
+        try (CoStoSysConnection connection = obtainOrReserveConnection()){
             if (!tableExists(tableName))
                 throw new IllegalArgumentException("The table '" + tableName + "' does not exist.");
             FieldConfig fieldConfig = fieldConfigs.get(schemaName);
@@ -3463,7 +3462,7 @@ public class DataBaseConnector {
 
                 HashSet<String> pkNames = new HashSet<String>();
 
-                Connection conn = connPair.getLeft();
+                Connection conn = connection.getConnection();
                 try {
                     ResultSet res = conn.getMetaData().getImportedKeys("", schema, tableName);
                     while (res.next())
@@ -3490,8 +3489,6 @@ public class DataBaseConnector {
                         "schema \"" + schemaName + "\" that is used to operate on that table specifies a different set of " + columnType + "columns:" +
                         StringUtils.join(definedColumns, " ") + ". The active table schema is specified in the CoStoSys XML coniguration file.");
             }
-        } finally {
-            releaseConnection(connPair);
         }
     }
 
@@ -3756,8 +3753,9 @@ public class DataBaseConnector {
      *
      * @return A connection associated with the current thread.
      * @throws IllegalStateException If there are no reserved connections for the current thread.
-     * @see #reserveConnection()
+     * @see #obtainOrReserveConnection()
      * @see #releaseConnections()
+     * @see #reserveConnection()
      */
     public Connection obtainConnection() {
         Thread currentThread = Thread.currentThread();
@@ -3774,13 +3772,24 @@ public class DataBaseConnector {
     }
 
     /**
-     * Guaranteed to return either an already reserved connection or a newly reserved one. The second value returned
-     * is a boolean that indicates whether the returned connection was newly reserved or not (<code>true</code> /
-     * <code>false</code>, respectively).
+     * <p>
+     * This is the preferred way to obtain a database connection. It will reuse an existing connection or get a new one if required.
+     * </p>
+     * <p>A reserved connection is required by many internal methods that need a database
+     * connection. They will aquire it by calling {@link #obtainConnection()}. This helps in reusing the same connection
+     * for multiple tasks within a single thread. This also helps to avoid deadlocks where a single thread requests
+     * multiple connections from the connection pool in method subcalls, blocking itself.</p>
+     * <p>
+     * Guaranteed to return either an already reserved connection or a newly reserved one. The <tt>newlyReserved</tt> property of the returned
+     * object indicates whether the returned connection was newly reserved or not (<code>true</code> /
+     * <code>false</code>, respectively). To comfortably release the connection only when it was newly reserved, use
+     * {@link #releaseConnection(CoStoSysConnection)} or simply {@link CoStoSysConnection#release()}.
+     * </p>
      *
      * @return A pair consisting of connection and the information if it was newly reserved or not.
+     * @see #releaseConnection(CoStoSysConnection)
      */
-    public Pair<Connection, Boolean> obtainOrReserveConnection() {
+    public CoStoSysConnection obtainOrReserveConnection() {
         Connection connection;
         int reservedConnections = getNumReservedConnections();
         if (reservedConnections == 0) {
@@ -3788,7 +3797,7 @@ public class DataBaseConnector {
         } else {
             connection = obtainConnection();
         }
-        return new ImmutablePair<>(connection, reservedConnections == 0);
+        return new CoStoSysConnection(this, connection, reservedConnections == 0);
     }
 
     public int getNumReservedConnections() {
@@ -3817,10 +3826,13 @@ public class DataBaseConnector {
     }
 
     /**
-     * Reserves a connection for the current thread. This is required by many internal methods that need a database
+     * <p>Only use when you are sure you need this method. Otherwise, use {@link #obtainOrReserveConnection()}</p>
+     * <p>
+     * Reserves a connection for the current thread. A reserved connection is required by many internal methods that need a database
      * connection. They will aquire it by calling {@link #obtainConnection()}. This helps in reusing the same connection
      * for multiple tasks within a single thread. This also helps to avoid deadlocks where a single thread requests
      * multiple connections from the connection pool in method subcalls, blocking itself.
+     * </p>
      * <p>
      * Note that is possible to reserve multiple connections but that this does not have any positive effect as of now.
      * You should always only reserve one connection per thread. After the connection is not required any more, call
@@ -3847,8 +3859,10 @@ public class DataBaseConnector {
     }
 
     /**
-     * Releases all connections associated with the current thread back to the connection pool.
+     * Releases all connections associated with the current thread back to the connection pool. After this call,
+     * the current thread will not have any reserved connections left.
      *
+     * @see #obtainOrReserveConnection()
      * @see #reserveConnection()
      * @see #obtainConnection()
      */
@@ -3888,14 +3902,14 @@ public class DataBaseConnector {
     }
 
     /**
-     * Releases the connection included in the passed pair if the included boolean is set to <code>true</code>.
-     * Such pairs are generated by the {@link #obtainOrReserveConnection()} method.
+     * Releases the connection included in the passed <tt>CoStoSysConnection</tt> if the included boolean is set to <code>true</code>.
+     * Such objects are generated by the {@link #obtainOrReserveConnection()} method.
      *
-     * @param connPair The connection pair where the connection should be released if the boolean part of the pair is <code>true</code>.
+     * @param connPair The connection object where the connection should be released if <tt>isNewlyReserved</tt> is <code>true</code>.
      */
-    public void releaseConnection(Pair<Connection, Boolean> connPair) {
-        if (connPair.getRight())
-            releaseConnection(connPair.getLeft());
+    public void releaseConnection(CoStoSysConnection connPair) {
+        if (connPair.isNewlyReserved())
+            releaseConnection(connPair.getConnection());
     }
 
     public Object withConnectionQuery(DbcQuery<?> command) {

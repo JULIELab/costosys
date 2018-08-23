@@ -98,6 +98,8 @@ public final class Constants {
 
 	public static final String HIDDEN_CONFIG_PATH = "dbcTest.hiddenConfigPath";
 
+	public static final String COSTOSYS_CONFIG_FILE = "costosys.configurationfile";
+
 	public static final String MIRROR_COLLECTION_NAME = "_mirrorSubsets";
 
 	public static final String MIRROR_COLUMN_DATA_TABLE_NAME = "datatablename";
