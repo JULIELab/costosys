@@ -2934,7 +2934,7 @@ public class DataBaseConnector {
      *                       bytes.
      */
     public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition, String schemaName) {
-        if (!tableExists(tableName))
+        if (!withConnectionQueryBoolean(c -> c.tableExists(tableName)))
             throw new IllegalArgumentException("Table \"" + tableName + "\" does not exist.");
 
         final FieldConfig fieldConfig = fieldConfigs.get(schemaName);
@@ -3012,7 +3012,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-                  releaseConnection(conn);
+                    releaseConnection(conn);
                 }
             };
 
@@ -3086,11 +3086,11 @@ public class DataBaseConnector {
      */
     public DBCIterator<byte[][]> querySubset(final String tableName, final String whereClause, final long limitParam,
                                              Integer numberRefHops, final String schemaName) throws SQLException {
-        if (!tableExists(tableName))
+        if (!withConnectionQueryBoolean(c -> c.tableExists(tableName)))
             throw new IllegalArgumentException("Table \"" + tableName + "\" does not exist.");
 
         final FieldConfig fieldConfig = fieldConfigs.get(schemaName);
-        final String dataTable = getReferencedTable(tableName, numberRefHops);
+        final String dataTable = withConnectionQueryString(c -> c.getReferencedTable(tableName, numberRefHops));
         if (dataTable.equals(tableName)) {
             String newWhereClause = whereClause;
             if (newWhereClause == null && limitParam > 0)
@@ -3104,7 +3104,7 @@ public class DataBaseConnector {
             return queryDataTable(tableName, newWhereClause, schemaName);
         }
 
-        final Connection conn = obtainConnection();
+        final Connection conn = reserveConnection();
         try {
             // We will set the key-retrieval-statement below to cursor mode by
             // specifying a maximum number of rows to return; for this to work,
@@ -3179,7 +3179,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-
+                    releaseConnection(conn);
                 }
 
             };
@@ -3898,7 +3898,7 @@ public class DataBaseConnector {
             releaseConnection(connPair.getLeft());
     }
 
-    public boolean withConnectionQueryBoolean(Predicate<DataBaseConnector> command) {
+    public Object withConnectionQuery(DbcQuery<?> command) {
         boolean close = false;
         Connection conn = null;
         if (getNumReservedConnections() > 0)
@@ -3907,58 +3907,34 @@ public class DataBaseConnector {
             conn = reserveConnection();
             close = true;
         }
-        boolean ret = command.test(this);
+        Object ret = null;
+        try {
+            ret = command.query(this);
+        } catch (Throwable throwable) {
+            LOG.error("Could not execute query", throwable);
+        }
         if (close)
             releaseConnection(conn);
         return ret;
     }
 
-    public int withConnectionQueryInteger(Function<DataBaseConnector, Integer> command) {
-        boolean close = false;
-        Connection conn = null;
-        if (getNumReservedConnections() > 0)
-            obtainConnection();
-        if (conn == null) {
-            conn = reserveConnection();
-            close = true;
-        }
-        int ret = command.apply(this);
-        if (close)
-            releaseConnection(conn);
-        return ret;
+    public boolean withConnectionQueryBoolean(DbcQuery<Boolean> command) {
+        return (boolean) withConnectionQuery(command);
     }
 
-    public double withConnectionQueryDouble(Function<DataBaseConnector, Double> command) {
-        boolean close = false;
-        Connection conn = null;
-        if (getNumReservedConnections() > 0)
-            obtainConnection();
-        if (conn == null) {
-            conn = reserveConnection();
-            close = true;
-        }
-        double ret = command.apply(this);
-        if (close)
-            releaseConnection(conn);
-        return ret;
+    public int withConnectionQueryInteger(DbcQuery<Integer> command) {
+        return (int) withConnectionQuery(command);
     }
 
-    public String withConnectionQueryString(Function<DataBaseConnector, String> command) {
-        boolean close = false;
-        Connection conn = null;
-        if (getNumReservedConnections() > 0)
-            obtainConnection();
-        if (conn == null) {
-            conn = reserveConnection();
-            close = true;
-        }
-        String ret = command.apply(this);
-        if (close)
-            releaseConnection(conn);
-        return ret;
+    public double withConnectionQueryDouble(DbcQuery<Double> command) {
+        return (double) withConnectionQuery(command);
     }
 
-    public void withConnectionExecute(Consumer<DataBaseConnector> command) {
+    public String withConnectionQueryString(DbcQuery<String> query) {
+        return (String) withConnectionQuery(query);
+    }
+
+    public void withConnectionExecute(DbcExecution command) {
         boolean close = false;
         Connection conn = null;
         if (getNumReservedConnections() > 0)
@@ -3967,7 +3943,11 @@ public class DataBaseConnector {
             conn = reserveConnection();
             close = true;
         }
-        command.accept(this);
+        try {
+            command.execute(this);
+        } catch (Throwable throwable) {
+            LOG.error("Could not execute SQL", throwable);
+        }
         if (close)
             releaseConnection(conn);
     }

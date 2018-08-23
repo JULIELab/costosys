@@ -101,6 +101,7 @@ public class DataBaseConnectorTest {
         dbc.createSubsetTable("querysubset", Constants.DEFAULT_DATA_TABLE_NAME, "");
         dbc.initSubset("querysubset", Constants.DEFAULT_DATA_TABLE_NAME);
         assertThat(dbc.getNumRows("querysubset")).isGreaterThan(0);
+        dbc.releaseConnections();
         DBCIterator<byte[][]> it = dbc.querySubset("querysubset", 0);
         Set<String> retrieved = new HashSet<>();
         while (it.hasNext()) {
@@ -108,21 +109,21 @@ public class DataBaseConnectorTest {
             retrieved.add(new String(next[0]));
         }
         assertThat(retrieved).hasSize(10);
-        dbc.releaseConnections();
     }
 
     @Test
-    public void testXmlData() throws SQLException, UnsupportedEncodingException {
-        dbc.reserveConnection();
-        dbc.createTable("myxmltest", "xmi_text","XML Test Table");
+    public void testXmlData() throws  UnsupportedEncodingException {
+        dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text","XML Test Table"));
         Map<String, Object> row = new HashMap<>();
         row.put("docid", "doc1");
         row.put("xmi", "some nonsense");
+        dbc.reserveConnection();
         assertThatCode(() -> dbc.importFromRowIterator(Arrays.asList(row).iterator(), "myxmltest", "xmi_text")).doesNotThrowAnyException();
+        dbc.releaseConnections();
+        // Iterators use their own connection
         DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, "xmi_text");
         byte[][] next = dbcIterator.next();
         assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
         assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
-        dbc.releaseConnections();
     }
 }
