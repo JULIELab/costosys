@@ -3916,7 +3916,7 @@ public class DataBaseConnector {
         boolean close = false;
         Connection conn = null;
         if (getNumReservedConnections() > 0)
-            obtainConnection();
+            conn = obtainConnection();
         if (conn == null) {
             conn = reserveConnection();
             close = true;
@@ -3952,7 +3952,7 @@ public class DataBaseConnector {
         boolean close = false;
         Connection conn = null;
         if (getNumReservedConnections() > 0)
-            obtainConnection();
+            conn = obtainConnection();
         if (conn == null) {
             conn = reserveConnection();
             close = true;

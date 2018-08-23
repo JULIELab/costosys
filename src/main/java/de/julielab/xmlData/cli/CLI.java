@@ -242,120 +242,122 @@ public class CLI {
             tableSchema = dbc.getConfig().getTableSchemaNames().get(Integer.parseInt(tableSchema));
         }
 
-        switch (mode) {
-            case QUERY:
-                QueryOptions qo = new QueryOptions();
-                qo.fileStr = fileStr;
-                qo.queryStr = queryStr;
-                qo.useDelimiter = useDelimiter;
-                qo.pubmedArticleSet = returnPubmedArticleSet;
-                qo.xpath = xpath;
-                qo.baseOutDirStr = baseOutDir;
-                qo.batchSizeStr = batchSize;
-                qo.limitStr = limit;
-                qo.tableName = superTableName;
-                qo.tableSchema = tableSchema;
-                qo.whereClause = whereClause;
-                qo.numberRefHops = numberRefHops;
-                error = doQuery(dbc, qo);
-                break;
+        try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+            switch (mode) {
+                case QUERY:
+                    QueryOptions qo = new QueryOptions();
+                    qo.fileStr = fileStr;
+                    qo.queryStr = queryStr;
+                    qo.useDelimiter = useDelimiter;
+                    qo.pubmedArticleSet = returnPubmedArticleSet;
+                    qo.xpath = xpath;
+                    qo.baseOutDirStr = baseOutDir;
+                    qo.batchSizeStr = batchSize;
+                    qo.limitStr = limit;
+                    qo.tableName = superTableName;
+                    qo.tableSchema = tableSchema;
+                    qo.whereClause = whereClause;
+                    qo.numberRefHops = numberRefHops;
+                    error = doQuery(dbc, qo);
+                    break;
 
-            case IMPORT:
-                error = doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
-                break;
+                case IMPORT:
+                    error = doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
+                    break;
 
-            case SUBSET:
-                error = doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
-                        subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops);
-                break;
+                case SUBSET:
+                    error = doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
+                            subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops);
+                    break;
 
-            case RESET:
-                if (subsetTableName == null) {
-                    LOG.error("You must provide the name of the subset table to reset.");
-                    error = true;
-                } else {
-                    boolean files = cmd.hasOption("f");
-                    try {
-                        if (!files || StringUtils.isBlank(fileStr)) {
-                            boolean np = cmd.hasOption("np");
-                            boolean ne = cmd.hasOption("ne");
-                            String lc = cmd.hasOption("lc") ? cmd.getOptionValue("lc") : null;
-                            if (np)
-                                logMessage("table reset is restricted to non-processed table rows");
-                            if (ne)
-                                logMessage("table reset is restricted to table row without errors");
-                            if (lc != null)
-                                logMessage("table reset is restricted to rows with last component " + lc);
-                            if (!np && !ne && lc == null) {
-                                SubsetStatus status = dbc.status(subsetTableName, EnumSet.of(IN_PROCESS, IS_PROCESSED, TOTAL));
-                                long inProcess = status.inProcess;
-                                long isProcessed = status.isProcessed;
-                                long total = status.total;
-                                // We don't bother with too small datasets, worst
-                                // case would be to do it again for 10000 docs which
-                                // is not much.
-                                if (total > 10000 && inProcess + isProcessed >= total / 2) {
-                                    String input = getYesNoAnswer("The subset table \"" + subsetTableName
-                                            + "\" is in process or already processed over 50%."
-                                            + " Do you really wish to reset it completely into an unprocessed state? (yes/no)");
-                                    if (input.equals("no"))
-                                        System.exit(0);
+                case RESET:
+                    if (subsetTableName == null) {
+                        LOG.error("You must provide the name of the subset table to reset.");
+                        error = true;
+                    } else {
+                        boolean files = cmd.hasOption("f");
+                        try {
+                            if (!files || StringUtils.isBlank(fileStr)) {
+                                boolean np = cmd.hasOption("np");
+                                boolean ne = cmd.hasOption("ne");
+                                String lc = cmd.hasOption("lc") ? cmd.getOptionValue("lc") : null;
+                                if (np)
+                                    logMessage("table reset is restricted to non-processed table rows");
+                                if (ne)
+                                    logMessage("table reset is restricted to table row without errors");
+                                if (lc != null)
+                                    logMessage("table reset is restricted to rows with last component " + lc);
+                                if (!np && !ne && lc == null) {
+                                    SubsetStatus status = dbc.status(subsetTableName, EnumSet.of(IN_PROCESS, IS_PROCESSED, TOTAL));
+                                    long inProcess = status.inProcess;
+                                    long isProcessed = status.isProcessed;
+                                    long total = status.total;
+                                    // We don't bother with too small datasets, worst
+                                    // case would be to do it again for 10000 docs which
+                                    // is not much.
+                                    if (total > 10000 && inProcess + isProcessed >= total / 2) {
+                                        String input = getYesNoAnswer("The subset table \"" + subsetTableName
+                                                + "\" is in process or already processed over 50%."
+                                                + " Do you really wish to reset it completely into an unprocessed state? (yes/no)");
+                                        if (input.equals("no"))
+                                            System.exit(0);
+                                    }
+                                }
+                                dbc.resetSubset(subsetTableName, np, ne, lc);
+                            } else {
+                                logMessage("Resetting all documents identified by the IDs in file \"" + fileStr + "\".");
+                                try {
+                                    List<Object[]> pkValues = asListOfArrays(fileStr);
+                                    dbc.resetSubset(subsetTableName, pkValues);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
                                 }
                             }
-                            dbc.resetSubset(subsetTableName, np, ne, lc);
-                        } else {
-                            logMessage("Resetting all documents identified by the IDs in file \"" + fileStr + "\".");
-                            try {
-                                List<Object[]> pkValues = asListOfArrays(fileStr);
-                                dbc.resetSubset(subsetTableName, pkValues);
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+                        } catch (TableNotFoundException e) {
+                            e.printStackTrace();
                         }
-                    } catch (TableNotFoundException e) {
-                        e.printStackTrace();
                     }
-                }
-                break;
-            case STATUS:
-                error = doStatus(dbc, subsetTableName);
-                break;
+                    break;
+                case STATUS:
+                    error = doStatus(dbc, subsetTableName);
+                    break;
 
-            case TABLES:
-                for (String s : dbc.getTables())
-                    System.out.println(s);
-                break;
+                case TABLES:
+                    for (String s : dbc.getTables())
+                        System.out.println(s);
+                    break;
 
-            case TABLE_DEFINITION:
-                for (String s : dbc.getTableDefinition(tableName))
-                    System.out.println(s);
-                break;
+                case TABLE_DEFINITION:
+                    for (String s : dbc.getTableDefinition(tableName))
+                        System.out.println(s);
+                    break;
 
-            case LIST_TABLE_SCHEMAS:
-                System.out.println("The following table schema names are contained in the current configuration:\n");
-                List<String> tableSchemaNames = dbc.getConfig().getTableSchemaNames();
-                IntStream.range(0, tableSchemaNames.size()).mapToObj(i -> i + " " + tableSchemaNames.get(i))
-                        .forEach(System.out::println);
-                break;
+                case LIST_TABLE_SCHEMAS:
+                    System.out.println("The following table schema names are contained in the current configuration:\n");
+                    List<String> tableSchemaNames = dbc.getConfig().getTableSchemaNames();
+                    IntStream.range(0, tableSchemaNames.size()).mapToObj(i -> i + " " + tableSchemaNames.get(i))
+                            .forEach(System.out::println);
+                    break;
 
-            case SCHEME:
-                System.out.println(dbc.getScheme());
-                break;
+                case SCHEME:
+                    System.out.println(dbc.getScheme());
+                    break;
 
-            case CHECK:
-                dbc.checkTableDefinition(tableName);
-                break;
+                case CHECK:
+                    dbc.checkTableDefinition(tableName);
+                    break;
 
-            case DEFAULT_CONFIG:
-                System.out.println(new String(dbc.getEffectiveConfiguration()));
-                break;
+                case DEFAULT_CONFIG:
+                    System.out.println(new String(dbc.getEffectiveConfiguration()));
+                    break;
 
-            case DROP_TABLE:
-                dropTableInteractively(dbc, cmd.getOptionValue("dt"));
-                break;
+                case DROP_TABLE:
+                    dropTableInteractively(dbc, cmd.getOptionValue("dt"));
+                    break;
 
-            case ERROR:
-                break;
+                case ERROR:
+                    break;
+            }
         }
 
         if (error) {
@@ -421,8 +423,7 @@ public class CLI {
      * Poses <tt>question</tt> to the user and awaits for a <tt>yes</tt> or
      * <tt>no</tt> answer and returns it.
      *
-     * @param question
-     *            the question raised
+     * @param question the question raised
      * @return the answer <tt>yes</tt> or <tt>no</tt>
      */
     private static String getYesNoAnswer(String question) {
@@ -961,11 +962,8 @@ public class CLI {
     }
 
     /**
-     *
-     * @param dbc
-     *            - databaseconnector
-     * @param tableName
-     *            - name of the table to check
+     * @param dbc       - databaseconnector
+     * @param tableName - name of the table to check
      * @return true - if there was an error, otherwise false
      */
     private static boolean checkSchema(DataBaseConnector dbc, String tableName) {
