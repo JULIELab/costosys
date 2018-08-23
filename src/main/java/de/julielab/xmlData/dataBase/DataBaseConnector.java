@@ -2957,7 +2957,7 @@ public class DataBaseConnector {
 
             DBCIterator<byte[][]> it = new DBCIterator<byte[][]>() {
 
-                private Connection conn = obtainConnection();
+                private Connection conn = reserveConnection();
                 private ResultSet rs = doQuery(conn);
                 private boolean hasNext = rs.next();
 
@@ -3012,14 +3012,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-                    try {
-                        if (!conn.isClosed()) {
-                            conn.commit();
-                            conn.setAutoCommit(true);
-                        }
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
+                  releaseConnection(conn);
                 }
             };
 
