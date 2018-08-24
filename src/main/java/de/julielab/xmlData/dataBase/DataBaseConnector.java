@@ -2384,7 +2384,7 @@ public class DataBaseConnector {
 
             List<PreparedStatement> mirrorStatements = null;
             if (mirrorNames != null) {
-                mirrorStatements = new ArrayList<PreparedStatement>();
+                mirrorStatements = new ArrayList<>();
                 for (String mirror : mirrorNames.keySet()) {
                     mirrorStatements.add(conn.prepareStatement(String.format(mirrorInsertStmtString, mirror)));
                 }
@@ -2519,68 +2519,74 @@ public class DataBaseConnector {
                                         FieldConfig fieldConfig, LinkedHashMap<String, Boolean> mirrorNames,
                                         List<PreparedStatement> mirrorStatements, PreparedStatement ps, List<Map<String, Object>> cache)
             throws SQLException {
-        int[] returned = ps.executeBatch();
+        boolean wasAutoCommit = externalConn.getAutoCommit();
+        try {
+            externalConn.setAutoCommit(false);
+            int[] returned = ps.executeBatch();
 
-        List<Map<String, Object>> toInsert = new ArrayList<Map<String, Object>>(commitBatchSize);
-        List<Map<String, Object>> toResetRows = new ArrayList<Map<String, Object>>(commitBatchSize);
-        List<Object[]> toResetPKs = new ArrayList<Object[]>();
+            List<Map<String, Object>> toInsert = new ArrayList<>(commitBatchSize);
+            List<Map<String, Object>> toResetRows = new ArrayList<>(commitBatchSize);
+            List<Object[]> toResetPKs = new ArrayList<>();
 
-        fillUpdateLists(cache, returned, toInsert, toResetPKs, toResetRows, fieldConfig);
-        importFromRowIterator(toInsert.iterator(), tableName, commit, schemaName);
-        // Do a commit to end the transaction. This is sometimes even necessary
-        // because following transactions would be blocked otherwise.
-        LOG.trace("Committing updates to the data table.");
-        externalConn.commit();
-        if (mirrorNames != null) {
-            LOG.trace("Applying updates to mirror subsets:");
-            List<Map<String, Object>> toInsertMirror = new ArrayList<Map<String, Object>>(commitBatchSize);
-            Iterator<String> mirrorNamesIt = mirrorNames.keySet().iterator();
-            Iterator<PreparedStatement> mirrorStatementsIt = mirrorStatements.iterator();
-            for (int j = 0; j < mirrorNames.size(); j++) {
-                String mirrorName = mirrorNamesIt.next();
-                LOG.trace("Applying to mirror subset \"{}\"", mirrorName);
-                // The mirrorNames hashmap has as values booleans telling
-                // whether to reset a mirror table or not. If not, we still want
-                // to know whether there are any missing rows and insert them.
-                if (mirrorNames.get(mirrorName)) {
-                    LOG.trace("Resetting updated rows.");
-                    returned = resetSubset(externalConn, mirrorName, toResetPKs, schemaName);
-                } else {
-                    LOG.trace("Updates rows are NOT reset.");
-                    returned = determineExistingSubsetRows(externalConn, mirrorName, toResetPKs, schemaName);
-                }
-                // Possibly some update documents don't even exist
-                // in a mirror subset. This shouldn't happen of
-                // course, but it might due to errors. This allows
-                // to repair the error by an update instead of
-                // deleting the missing data from the data table and
-                // re-import it.
-                fillUpdateLists(toResetRows, returned, toInsertMirror, null, null, fieldConfig);
-                if (toInsertMirror.size() > 0) {
-                    LOG.trace("{} updated rows where not found in this mirror subset. They will be added");
-                    // The mirror insert statements are a parallel list
-                    // to mirrorNames, thus the jth mirrorName belong to
-                    // the jth insert statement.
-                    PreparedStatement mirrorPS = mirrorStatementsIt.next();
-                    for (Map<String, Object> missingMirrorRow : toInsertMirror) {
-                        for (int k = 0; k < fieldConfig.getPrimaryKey().length; k++) {
-                            String fieldName = fieldConfig.getPrimaryKey()[k];
-                            setPreparedStatementParameterWithType(k + 1, mirrorPS, missingMirrorRow.get(fieldName),
-                                    fieldName, fieldConfig);
-                        }
-                        mirrorPS.addBatch();
+            fillUpdateLists(cache, returned, toInsert, toResetPKs, toResetRows, fieldConfig);
+            importFromRowIterator(toInsert.iterator(), tableName, commit, schemaName);
+            // Do a commit to end the transaction. This is sometimes even necessary
+            // because following transactions would be blocked otherwise.
+            LOG.trace("Committing updates to the data table.");
+            externalConn.commit();
+            if (mirrorNames != null) {
+                LOG.trace("Applying updates to mirror subsets:");
+                List<Map<String, Object>> toInsertMirror = new ArrayList<>(commitBatchSize);
+                Iterator<String> mirrorNamesIt = mirrorNames.keySet().iterator();
+                Iterator<PreparedStatement> mirrorStatementsIt = mirrorStatements.iterator();
+                for (int j = 0; j < mirrorNames.size(); j++) {
+                    String mirrorName = mirrorNamesIt.next();
+                    LOG.trace("Applying to mirror subset \"{}\"", mirrorName);
+                    // The mirrorNames hashmap has as values booleans telling
+                    // whether to reset a mirror table or not. If not, we still want
+                    // to know whether there are any missing rows and insert them.
+                    if (mirrorNames.get(mirrorName)) {
+                        LOG.trace("Resetting updated rows.");
+                        returned = resetSubset(externalConn, mirrorName, toResetPKs, schemaName);
+                    } else {
+                        LOG.trace("Updates rows are NOT reset.");
+                        returned = determineExistingSubsetRows(externalConn, mirrorName, toResetPKs, schemaName);
                     }
-                    mirrorPS.executeBatch();
-                    toInsertMirror.clear();
-                } else {
-                    LOG.trace("All updated rows exist in the mirror subset.");
+                    // Possibly some update documents don't even exist
+                    // in a mirror subset. This shouldn't happen of
+                    // course, but it might due to errors. This allows
+                    // to repair the error by an update instead of
+                    // deleting the missing data from the data table and
+                    // re-import it.
+                    fillUpdateLists(toResetRows, returned, toInsertMirror, null, null, fieldConfig);
+                    if (toInsertMirror.size() > 0) {
+                        LOG.trace("{} updated rows where not found in this mirror subset. They will be added");
+                        // The mirror insert statements are a parallel list
+                        // to mirrorNames, thus the jth mirrorName belong to
+                        // the jth insert statement.
+                        PreparedStatement mirrorPS = mirrorStatementsIt.next();
+                        for (Map<String, Object> missingMirrorRow : toInsertMirror) {
+                            for (int k = 0; k < fieldConfig.getPrimaryKey().length; k++) {
+                                String fieldName = fieldConfig.getPrimaryKey()[k];
+                                setPreparedStatementParameterWithType(k + 1, mirrorPS, missingMirrorRow.get(fieldName),
+                                        fieldName, fieldConfig);
+                            }
+                            mirrorPS.addBatch();
+                        }
+                        mirrorPS.executeBatch();
+                        toInsertMirror.clear();
+                    } else {
+                        LOG.trace("All updated rows exist in the mirror subset.");
+                    }
                 }
             }
-        }
 
-        if (commit) {
-            LOG.trace("Committing updates.");
-            externalConn.commit();
+            if (commit) {
+                LOG.trace("Committing updates.");
+                externalConn.commit();
+            }
+        } finally {
+            externalConn.setAutoCommit(wasAutoCommit);
         }
     }
 
@@ -3184,7 +3190,7 @@ public class DataBaseConnector {
                 @Override
                 public void close() {
                     try {
-                        if (!conn.isClosed())releaseConnection(conn);
+                        if (!conn.isClosed()) releaseConnection(conn);
                     } catch (SQLException e) {
                         e.printStackTrace();
                     }
@@ -3426,7 +3432,7 @@ public class DataBaseConnector {
      * @param tableName - table to check
      */
     public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException {
-        try (CoStoSysConnection connection = obtainOrReserveConnection()){
+        try (CoStoSysConnection connection = obtainOrReserveConnection()) {
             if (!tableExists(tableName))
                 throw new IllegalArgumentException("The table '" + tableName + "' does not exist.");
             FieldConfig fieldConfig = fieldConfigs.get(schemaName);
