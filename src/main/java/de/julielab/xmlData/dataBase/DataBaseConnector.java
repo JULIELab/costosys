@@ -3012,7 +3012,11 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-                    releaseConnection(conn);
+                    try {
+                        conn.close();
+                    } catch (SQLException e) {
+                        LOG.error("Could not close connection", e);
+                    }
                 }
             };
 
@@ -3179,7 +3183,11 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-                    releaseConnection(conn);
+                    try {
+                        if (!conn.isClosed())releaseConnection(conn);
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
                 }
 
             };

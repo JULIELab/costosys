@@ -371,7 +371,7 @@ public class CLI {
 
     public static String findConfigurationFile() throws ConfigurationNotFoundException {
         String configFileProperty = System.getProperty(Constants.COSTOSYS_CONFIG_FILE);
-        if (new File(configFileProperty).exists())
+        if (configFileProperty != null && new File(configFileProperty).exists())
             return configFileProperty;
         File workingDirectory = new File(".");
         Set<String> possibleConfigFileNames = new HashSet<>(Arrays.asList(USER_SCHEME_DEFINITION));
@@ -677,7 +677,7 @@ public class CLI {
             // Main algorithm iterating over documents.
             try {
                 if (!error) {
-                    Iterator<byte[][]> it = null;
+                    Iterator<byte[][]> it;
                     if (!keysExplicitlyGiven) {
                         it = dbc.querySubset(tableName, qo.whereClause, limit, numberRefHops, tableSchema);
                     } else if (keys.size() > 0)
