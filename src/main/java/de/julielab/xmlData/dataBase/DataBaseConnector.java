@@ -15,6 +15,10 @@
 
 package de.julielab.xmlData.dataBase;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
@@ -48,6 +52,7 @@ import java.sql.*;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.function.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -97,8 +102,6 @@ public class DataBaseConnector {
     private static final int RETRIEVE_MARK_LIMIT = 1000;
     private static final int ID_SUBLIST_SIZE = 1000;
     private static final Map<String, HikariDataSource> pools = new ConcurrentHashMap<>();
-    private static final Map<Thread, List<Connection>> connectionAssignments = new ConcurrentHashMap();
-
     /**
      * A set of field definitions read from a configuration XML file. Contains the
      * name of each field as well as a source for the field's value.
@@ -120,6 +123,17 @@ public class DataBaseConnector {
         subsetColumns.put(Constants.PROCESSING_TIMESTAMP, "timestamp without time zone");
     }
 
+    private LoadingCache<Thread, List<Connection>> connectionCache = CacheBuilder
+            .newBuilder()
+            // The weak keys are the main reason to use the cache. It allows to garbage collect the threads
+            // that have reserved connections and did never release them.
+            .weakKeys()
+            .build(new CacheLoader<Thread, List<Connection>>() {
+                @Override
+                public List<Connection> load(Thread thread) {
+                    return new ArrayList<>();
+                }
+            });
     /**
      * Sometimes it is necessary to manage multiple data tables with different field
      * schemas. fieldConfigs contains all field schema names in the configuration,
@@ -329,7 +343,7 @@ public class DataBaseConnector {
     Connection getConn() {
 
         Connection conn = null;
-        if (null == dataSource) {
+        if (null == dataSource || ((HikariDataSource) dataSource).isClosed()) {
             LOG.debug("Setting up connection pool data source");
             HikariConfig hikariConfig = new HikariConfig();
             hikariConfig.setPoolName("costosys-" + System.nanoTime());
@@ -384,6 +398,7 @@ public class DataBaseConnector {
                     stm.execute(String.format("SET search_path TO %s", dbConfig.getActivePGSchema()));
                     stm.close();
                 } catch (SQLException e) {
+                    LOG.warn("SQLException occurred:", e);
                     LOG.warn("Could not obtain a database connection within the timeout. Trying again. Number of try: {}", ++retries);
                     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
                     try {
@@ -399,10 +414,11 @@ public class DataBaseConnector {
                         LOG.warn("Pool {} has {} active connections", poolName, activeConnections);
                         LOG.warn("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
 
-                    } catch (MalformedObjectNameException e1) {
-                        e1.printStackTrace();
+                    } catch (Throwable t) {
+                        LOG.warn("Could not retrieve connection pool statistics: {}. More information can be found on DEBUG level.", t.getMessage());
+                        LOG.debug("Could not retrieve connection pool statistics:", t);
                     }
-                    if (retries == 900)
+                    if (retries == 3)
                         throw e;
                 }
             } while (conn == null);
@@ -3773,11 +3789,12 @@ public class DataBaseConnector {
      */
     public Connection obtainConnection() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> list = connectionAssignments.compute(currentThread, (t, l) -> {
-            List<Connection> ret = l;
-            if (ret == null) ret = new ArrayList<>();
-            return ret;
-        });
+        List<Connection> list = null;
+        try {
+            list = connectionCache.get(currentThread);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
         cleanClosedReservedConnections(list);
         if (list.isEmpty())
             throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
@@ -3816,7 +3833,12 @@ public class DataBaseConnector {
 
     public int getNumReservedConnections() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> list = connectionAssignments.getOrDefault(currentThread, Collections.emptyList());
+        List<Connection> list = null;
+        try {
+            list = connectionCache.get(currentThread);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
         cleanClosedReservedConnections(list);
         return list.size();
     }
@@ -3859,11 +3881,12 @@ public class DataBaseConnector {
      */
     public Connection reserveConnection() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> list = connectionAssignments.compute(currentThread, (t, l) -> {
-            List<Connection> ret = l;
-            if (ret == null) ret = new ArrayList<>();
-            return ret;
-        });
+        List<Connection> list = null;
+        try {
+            list = connectionCache.get(currentThread);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
         cleanClosedReservedConnections(list);
         if (list.size() == dbConfig.getMaxConnections())
             throw new UnobtainableConnectionException("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool.");
@@ -3882,7 +3905,12 @@ public class DataBaseConnector {
      */
     public void releaseConnections() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> connectionList = connectionAssignments.getOrDefault(currentThread, Collections.emptyList());
+        List<Connection> connectionList = null;
+        try {
+            connectionList = connectionCache.get(currentThread);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
         for (Connection conn : connectionList) {
             try {
                 if (!conn.isClosed())
@@ -3906,7 +3934,12 @@ public class DataBaseConnector {
     public void releaseConnection(Connection conn) {
         Thread currentThread = Thread.currentThread();
         try {
-            List<Connection> connectionList = connectionAssignments.getOrDefault(currentThread, Collections.emptyList());
+            List<Connection> connectionList = null;
+            try {
+                connectionList = connectionCache.get(currentThread);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
             if (!connectionList.remove(conn))
                 throw new IllegalArgumentException("A connection should be released that is not associated with thread \"" + currentThread.getName() + "\".");
             conn.close();

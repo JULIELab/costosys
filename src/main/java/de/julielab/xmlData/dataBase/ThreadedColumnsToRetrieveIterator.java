@@ -93,7 +93,6 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
      */
     @Override
     public void close() {
-        super.close();
         ((ArrayResToListThread) backgroundThread).end();
     }
 
@@ -117,6 +116,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
      * @author hellrich
      */
     private class ArrayResToListThread extends Thread implements ConnectionClosable {
+        private final Logger log = LoggerFactory.getLogger(ArrayResToListThread.class);
         private final ArrayFromDBThread arrayFromDBThread;
         private Exchanger<List<byte[][]>> listExchanger;
         private Exchanger<ResultSet> resExchanger = new Exchanger<ResultSet>();
@@ -181,16 +181,17 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 }
                 listExchanger.exchange(null); // stop signal
             } catch (InterruptedException | SQLException | IOException e) {
-                LOG.error(
+                log.error(
                         "Exception occured while reading " + "data from result set, index {}. "
                                 + "Corresponding field in schema definition is: {}. Read data was: \"{}\"",
                         new Object[]{i + 1, fields.get(i), new String(retrievedData[i])});
                 e.printStackTrace();
             } catch (NullPointerException e) {
-                LOG.debug("NPE on: Index {}, field {}, data {}",
+                log.debug("NPE on: Index {}, field {}, data {}",
                         new Object[]{i, fields.get(i), retrievedData != null ? retrievedData[i] : null});
                 throw e;
             }
+            log.debug("ArrayResToListThread has finished" );
         }
 
         /**
@@ -220,6 +221,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
      * @author hellrich
      */
     private class ArrayFromDBThread extends Thread implements ConnectionClosable {
+        private final Logger log = LoggerFactory.getLogger(ArrayFromDBThread.class);
         private final boolean closeConnection;
         private Iterator<Object[]> keyIter;
         private Exchanger<ResultSet> resExchanger;
@@ -301,7 +303,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 }
                 selectFrom = "SELECT " + StringUtils.join(select, ",") + " FROM " + table[0] + " "
                         + StringUtils.join(leftJoin, " ") + " WHERE ";
-                LOG.trace("Querying data via SQL: {}", selectFrom);
+                log.trace("Querying data via SQL: {}", selectFrom);
             }
         }
 
@@ -323,10 +325,11 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                     try {
                         conn.close();
                     } catch (SQLException e) {
-                        LOG.error("Could not close connection", e);
+                        log.error("Could not close connection", e);
                     }
                 }
             }
+            log.debug("ArrayFromDBThread has finished" );
         }
 
         /**

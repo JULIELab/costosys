@@ -15,47 +15,25 @@
 
 package de.julielab.xmlData.cli;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.sql.Connection;
+import de.julielab.xml.JulieXMLConstants;
+import de.julielab.xml.JulieXMLTools;
+import de.julielab.xmlData.Constants;
+import de.julielab.xmlData.config.TableSchemaDoesNotExistException;
+import de.julielab.xmlData.dataBase.CoStoSysConnection;
+import de.julielab.xmlData.dataBase.DataBaseConnector;
+import de.julielab.xmlData.dataBase.SubsetStatus;
+import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
+import org.apache.commons.cli.*;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-
-import de.julielab.hiddenConfig.HiddenConfig;
-import de.julielab.xmlData.config.TableSchemaDoesNotExistException;
-import de.julielab.xmlData.dataBase.CoStoSysConnection;
-import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.OptionBuilder;
-import org.apache.commons.cli.OptionGroup;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import de.julielab.xml.JulieXMLConstants;
-import de.julielab.xml.JulieXMLTools;
-import de.julielab.xmlData.Constants;
-import de.julielab.xmlData.dataBase.DataBaseConnector;
-import de.julielab.xmlData.dataBase.SubsetStatus;
-
-import javax.security.auth.login.Configuration;
 
 import static de.julielab.xmlData.dataBase.DataBaseConnector.StatusElement.*;
 

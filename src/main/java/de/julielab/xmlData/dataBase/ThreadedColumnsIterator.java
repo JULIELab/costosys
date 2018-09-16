@@ -68,6 +68,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     }
 
     @Override
+    public void close() {
+        closeConnection();
+    }
+
+    @Override
     public void join() throws InterruptedException{
         ((ListFromDBThread)backgroundThread).join();
     }
