@@ -136,12 +136,34 @@
             <version>42.0.0</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-configuration2</artifactId>
+            <version>2.2</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+            <version>1.9.3</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>transport</artifactId>
+            <version>5.4.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>de.julielab</groupId>
             <artifactId>jcore-db-test-utilities</artifactId>
             <version>2.3.1-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
-    </dependencies>
+        <dependency>
+            <groupId>de.julielab</groupId>
+            <artifactId>julielab-java-utilities</artifactId>
+            <version>1.0.4</version>
+        </dependency></dependencies>
 
     <parent>
         <groupId>de.julielab</groupId>

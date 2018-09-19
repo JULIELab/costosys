@@ -15,6 +15,10 @@
 
 package de.julielab.xmlData.cli;
 
+import de.julielab.java.utilities.ConfigurationUtilities;
+import de.julielab.medline.ConfigurationConstants;
+import de.julielab.medline.MedlineUpdateException;
+import de.julielab.medline.Updater;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
 import de.julielab.xmlData.Constants;
@@ -24,6 +28,8 @@ import de.julielab.xmlData.dataBase.DataBaseConnector;
 import de.julielab.xmlData.dataBase.SubsetStatus;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
 import org.apache.commons.cli.*;
+import org.apache.commons.configuration2.XMLConfiguration;
+import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +65,7 @@ public class CLI {
         LOG.info(msg);
     }
 
-    public static void main(String[] args) throws SQLException, TableSchemaMismatchException, ConfigurationNotFoundException {
+    public static void main(String[] args) throws SQLException, TableSchemaMismatchException, ConfigurationNotFoundException, ConfigurationException, IOException, MedlineUpdateException {
         long time = System.currentTimeMillis();
         String dbUrl;
         String user;
@@ -121,6 +127,8 @@ public class CLI {
             mode = Mode.DEFAULT_CONFIG;
         if (cmd.hasOption("dt"))
             mode = Mode.DROP_TABLE;
+        if (cmd.hasOption("um"))
+            mode = Mode.UPDATE_MEDLINE;
 
         // authentication
         // config file
@@ -195,6 +203,14 @@ public class CLI {
             fileStr = cmd.getOptionValue("i");
         if (fileStr == null)
             fileStr = cmd.getOptionValue("u");
+        if (cmd.hasOption("im")) {
+            mode = Mode.IMPORT;
+            // For some reasons, multuple versions of some documents have been found in the baseline in the past.
+            // Just use the update mode.
+            XMLConfiguration importConfig = ConfigurationUtilities.loadXmlConfiguration(new File(cmd.getOptionValue("im")));
+            fileStr = importConfig.getString(ConfigurationConstants.INSERTION_INPUT);
+            updateMode = true;
+        }
 
         String superTableName = cmd.getOptionValue("z");
         if (superTableName == null)
@@ -331,6 +347,11 @@ public class CLI {
 
                 case DROP_TABLE:
                     dropTableInteractively(dbc, cmd.getOptionValue("dt"));
+                    break;
+
+                case UPDATE_MEDLINE:
+                    Updater updater = new Updater(ConfigurationUtilities.loadXmlConfiguration(new File(cmd.getOptionValue("um"))));
+                    updater.process(dbc);
                     break;
 
                 case ERROR:
@@ -816,7 +837,9 @@ public class CLI {
         OptionGroup modes = new OptionGroup();
 
         modes.addOption(buildOption("i", "import", "Import data into the _data table", "file/dir to import"));
+        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table", "XML file holding information about the PubMed/MEDLINE baseline location. It is the same file format used for the -um mode."));
         modes.addOption(buildOption("u", "update", "Update _data table", "file/dir to update from"));
+        modes.addOption(buildOption("um", "updatemedline", "Update _data table from PubMed/MEDLINE update files. Keeps track of already applied update files via an internal table.", "XML file holding information about the update file location. It is the same file format used for the -im mode."));
         modes.addOption(buildOption("s", "subset",
                 "Define a subset table; use -f, -o, -a, -m, -w or -r to specify the subsets source.",
                 "name of the new subset table"));
@@ -995,6 +1018,6 @@ public class CLI {
     }
 
     private enum Mode {
-        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE
+        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, UPDATE_MEDLINE
     }
 }
