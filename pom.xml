@@ -152,6 +152,24 @@
             <artifactId>transport</artifactId>
             <version>5.4.0</version>
             <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch.plugin</groupId>
+                    <artifactId>reindex-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch.plugin</groupId>
+                    <artifactId>lang-mustache-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch.plugin</groupId>
+                    <artifactId>percolator-client</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>de.julielab</groupId>
@@ -163,7 +181,8 @@
             <groupId>de.julielab</groupId>
             <artifactId>julielab-java-utilities</artifactId>
             <version>1.0.4</version>
-        </dependency></dependencies>
+        </dependency>
+    </dependencies>
 
     <parent>
         <groupId>de.julielab</groupId>
