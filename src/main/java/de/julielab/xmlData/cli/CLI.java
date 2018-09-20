@@ -838,9 +838,9 @@ public class CLI {
         OptionGroup modes = new OptionGroup();
 
         modes.addOption(buildOption("i", "import", "Import data into the _data table", "file/dir to import"));
-        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table", "XML file holding information about the PubMed/MEDLINE baseline location. It is the same file format used for the -um mode."));
+        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table. The parameter is a XML file holding information about the PubMed/MEDLINE baseline location. It is the same file format used for the -um mode.", "XML MEDLINE config"));
         modes.addOption(buildOption("u", "update", "Update _data table", "file/dir to update from"));
-        modes.addOption(buildOption("um", "updatemedline", "Update _data table from PubMed/MEDLINE update files. Keeps track of already applied update files via an internal table.", "XML file holding information about the update file location. It is the same file format used for the -im mode."));
+        modes.addOption(buildOption("um", "updatemedline", "Update _data table from PubMed/MEDLINE update files. Keeps track of already applied update files via an internal table. The parameter is a XML file holding information about the update file location. It is the same file format used for the -im mode.", "XML MEDLINE config"));
         modes.addOption(buildOption("s", "subset",
                 "Define a subset table; use -f, -o, -a, -m, -w or -r to specify the subsets source.",
                 "name of the new subset table"));

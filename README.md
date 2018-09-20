@@ -52,3 +52,23 @@ have been predefined, including
 | xmi_annotation_gzip | Used internally. The same as xmi_annotation but with the XMI data in GZIP format.|
 
 Custom table schema may be added to the configuration at XPath `/databaseConnectorConfiguration/DBSchemaInformation/tableSchemas`. Refer to docbook documentation and the XML schema for details.
+
+# MEDLINE Update Functionality
+
+The `-im` and `-um` modes (`import medline` and `update medline`, respectively) take as argument a configuration file
+on their own. Both work with the exact same file. The purpose of this additional configuration file is to avoid
+confusion about what data has been used in a productive system and to streamline the update process.
+The configuration XML file has the following format:
+
+    <medlineconfig>
+        <insertion>
+            <directory>/data/data_corpora/MEDLINE/medline2018/original_download/
+            </directory>
+        </insertion>
+        <update>
+            <directory>/data/data_corpora/MEDLINE/medline2018/updates/</directory>
+        </update>
+        <documentdeletions/>
+    </medlineconfig>
+    
+Document deleters have not yet been tested.
