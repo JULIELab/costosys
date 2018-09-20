@@ -15,7 +15,6 @@
 
 package de.julielab.xmlData.cli;
 
-import de.julielab.java.utilities.ConfigurationUtilities;
 import de.julielab.medline.ConfigurationConstants;
 import de.julielab.medline.MedlineUpdateException;
 import de.julielab.medline.Updater;
@@ -29,6 +28,8 @@ import de.julielab.xmlData.dataBase.SubsetStatus;
 import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
 import org.apache.commons.cli.*;
 import org.apache.commons.configuration2.XMLConfiguration;
+import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
+import org.apache.commons.configuration2.builder.fluent.Parameters;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -207,7 +208,7 @@ public class CLI {
             mode = Mode.IMPORT;
             // For some reasons, multuple versions of some documents have been found in the baseline in the past.
             // Just use the update mode.
-            XMLConfiguration importConfig = ConfigurationUtilities.loadXmlConfiguration(new File(cmd.getOptionValue("im")));
+            XMLConfiguration importConfig = loadXmlConfiguration(new File(cmd.getOptionValue("im")));
             fileStr = importConfig.getString(ConfigurationConstants.INSERTION_INPUT);
             updateMode = true;
         }
@@ -350,7 +351,7 @@ public class CLI {
                     break;
 
                 case UPDATE_MEDLINE:
-                    Updater updater = new Updater(ConfigurationUtilities.loadXmlConfiguration(new File(cmd.getOptionValue("um"))));
+                    Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("um"))));
                     updater.process(dbc);
                     break;
 
@@ -1019,5 +1020,18 @@ public class CLI {
 
     private enum Mode {
         IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, UPDATE_MEDLINE
+    }
+
+    public static XMLConfiguration loadXmlConfiguration(File configurationFile) throws ConfigurationException {
+        try {
+            Parameters params = new Parameters();
+            FileBasedConfigurationBuilder<XMLConfiguration> configBuilder =
+                    new FileBasedConfigurationBuilder<>(XMLConfiguration.class).configure(params
+                            .xml()
+                            .setFile(configurationFile));
+            return configBuilder.getConfiguration();
+        } catch (org.apache.commons.configuration2.ex.ConfigurationException e) {
+            throw new ConfigurationException(e);
+        }
     }
 }
