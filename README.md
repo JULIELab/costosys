@@ -53,6 +53,12 @@ have been predefined, including
 
 Custom table schema may be added to the configuration at XPath `/databaseConnectorConfiguration/DBSchemaInformation/tableSchemas`. Refer to docbook documentation and the XML schema for details.
 
+# How to use the Connection API
+To avoid database connection deadlocks, the central `DataBaseConnector` class keeps track of threads and the connections they use.
+The recommended method to obtain a connection is `obtainOrReserveConnection()` which will return an object of type `CoStoSysConnection`. This object is just a small wrapper around the actual `Connection` object and the information whether a new reservation was necessary or an already reserved connection is being reused. This is important when releasing the connection: We don't want to release an obtained connection that is still used by an algorithm in another scope of the same thread.
+To safely release such connections, use the method `releaseConnection(CoStoSysConnection)`. It will only close the connection if the respective connection was newly reserved but the corresponding call to `obtainOrReserveConnection()`. Note that the `CoStoSysConnection` class is `AutoClosable`. Thus, the recommended use is the `try(CoStoSysConnection cstsConn = dbc.obtainOrReserveConnection) {...}` pattern.
+
+
 # MEDLINE Update Functionality
 
 The `-im` and `-um` modes (`import medline` and `update medline`, respectively) take as argument a configuration file
