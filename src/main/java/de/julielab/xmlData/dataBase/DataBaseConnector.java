@@ -123,7 +123,7 @@ public class DataBaseConnector {
         subsetColumns.put(Constants.PROCESSING_TIMESTAMP, "timestamp without time zone");
     }
 
-    private LoadingCache<Thread, List<Connection>> connectionCache = CacheBuilder
+    private static LoadingCache<Thread, List<Connection>> connectionCache = CacheBuilder
             .newBuilder()
             // The weak keys are the main reason to use the cache. It allows to garbage collect the threads
             // that have reserved connections and did never release them.
