@@ -31,10 +31,7 @@ import de.julielab.xmlData.config.ConfigReader;
 import de.julielab.xmlData.config.DBConfig;
 import de.julielab.xmlData.config.FieldConfig;
 import de.julielab.xmlData.config.FieldConfigurationManager;
-import de.julielab.xmlData.dataBase.util.CoStoSysSQLRuntimeException;
-import de.julielab.xmlData.dataBase.util.NoReservedConnectionException;
-import de.julielab.xmlData.dataBase.util.TableSchemaMismatchException;
-import de.julielab.xmlData.dataBase.util.UnobtainableConnectionException;
+import de.julielab.xmlData.dataBase.util.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -2318,20 +2315,21 @@ public class DataBaseConnector {
                     conn.commit();
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOG.error("SQLException while trying to insert: ", e);
             SQLException nextException = e.getNextException();
             if (nextException != null) {
                 LOG.error("Next exception: ", nextException);
             }
+            throw new CoStoSysSQLRuntimeException(e);
         } finally {
             try {
                 if (commitThread != null)
                     commitThread.join();
                 conn.setAutoCommit(wasAutoCommit);
             } catch (SQLException e) {
-                e.printStackTrace();
+                throw new CoStoSysSQLRuntimeException(e);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                throw new CoStoSysRuntimeException(e);
             }
         }
     }
@@ -2393,6 +2391,7 @@ public class DataBaseConnector {
         String statementString = constructUpdateStatementString(tableName, fieldConfig);
         String mirrorInsertStmtString = constructMirrorInsertStatementString(fieldConfig);
         Connection conn = obtainConnection();
+        // this is just a default value in case the next line throws an exception
         boolean wasAutoCommit = true;
         try {
             wasAutoCommit = conn.getAutoCommit();
@@ -2495,22 +2494,21 @@ public class DataBaseConnector {
         } catch (SQLException e) {
             LOG.error(
                     "SQL error while updating table {}. Database configuration is: {}. Table schema configuration is: {}",
-                    new Object[]{tableName, dbConfig, fieldConfig});
-            e.printStackTrace();
+                   tableName, dbConfig, fieldConfig, e);
             SQLException nextException = e.getNextException();
             if (null != nextException) {
                 LOG.error("Next exception was: ", nextException);
-                nextException.printStackTrace();
             }
+            throw new CoStoSysSQLRuntimeException(e);
         } finally {
             try {
                 if (commitThread != null)
                     commitThread.join();
                 conn.setAutoCommit(wasAutoCommit);
             } catch (SQLException e) {
-                e.printStackTrace();
+                throw new CoStoSysSQLRuntimeException(e);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                throw new CoStoSysRuntimeException(e);
             }
         }
     }
