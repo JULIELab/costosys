@@ -126,4 +126,6 @@ public class DataBaseConnectorTest {
         assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
         assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
     }
+
+
 }

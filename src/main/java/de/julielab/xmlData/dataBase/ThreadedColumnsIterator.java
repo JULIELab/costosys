@@ -73,8 +73,8 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     }
 
     @Override
-    public void join() throws InterruptedException{
-        ((ListFromDBThread)backgroundThread).join();
+    public void join() throws InterruptedException {
+        ((ListFromDBThread) backgroundThread).join();
     }
 
     /**
@@ -290,12 +290,17 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                     listExchanger.exchange(currentList);
                 }
                 log.trace("No more results were retrieved from the ResultSet. Finishing retrieval.");
-                conn.setAutoCommit(true);
+                try {
+                    if (autoCommit != null) {
+                        log.trace("Setting auto commit back to {}", autoCommit);
+                        conn.setAutoCommit(autoCommit);
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Exception occurred when trying to set auto commit of connection {} to {}", conn, autoCommit, e);
+                }
                 // null as stop signal
                 listExchanger.exchange(null);
             } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (SQLException e) {
                 e.printStackTrace();
             }
             closeConnection();
@@ -332,17 +337,9 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
         @Override
         public void closeConnection() {
-            log.debug("Closing connection");
-            try {
-                if (autoCommit != null) {
-                    log.trace("Setting auto commit back to {}", autoCommit);
-                    conn.setAutoCommit(autoCommit);
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
             if (closeConnection) {
                 try {
+                    log.trace("Closing connection {}", conn);
                     conn.close();
                 } catch (SQLException e) {
                     log.error("Could not close connection", e);

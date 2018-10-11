@@ -3789,13 +3789,13 @@ public class DataBaseConnector {
      */
     public Connection obtainConnection() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> list = null;
+        List<Connection> list;
         try {
             list = connectionCache.get(currentThread);
         } catch (ExecutionException e) {
             throw new RuntimeException(e);
         }
-        cleanClosedReservedConnections(list);
+        cleanClosedReservedConnections(list, currentThread);
         if (list.isEmpty())
             throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
         // Currently, we only can have a single connection per thread. More might required in the future perhaps.
@@ -3839,7 +3839,7 @@ public class DataBaseConnector {
         } catch (ExecutionException e) {
             throw new RuntimeException(e);
         }
-        cleanClosedReservedConnections(list);
+        cleanClosedReservedConnections(list, currentThread);
         return list.size();
     }
 
@@ -3848,13 +3848,15 @@ public class DataBaseConnector {
      *
      * @param list The list of reserved connections of a thread.
      */
-    private void cleanClosedReservedConnections(List<Connection> list) {
+    private void cleanClosedReservedConnections(List<Connection> list, Thread thread) {
         Iterator<Connection> it = list.iterator();
         while (it.hasNext()) {
             Connection conn = it.next();
             try {
-                if (conn.isClosed())
+                if (conn.isClosed()) {
+                    LOG.trace("Removing connection {} from the list for thread \"{}\" because it is closed.", conn, thread.getName());
                     it.remove();
+                }
             } catch (SQLException e) {
                 LOG.error("Exception occurred when checking if a connection is closed", e);
             }
@@ -3881,17 +3883,23 @@ public class DataBaseConnector {
      */
     public Connection reserveConnection() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> list = null;
+        LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
+        List<Connection> list;
         try {
             list = connectionCache.get(currentThread);
         } catch (ExecutionException e) {
             throw new RuntimeException(e);
         }
-        cleanClosedReservedConnections(list);
+        int listSize = list.size();
+        cleanClosedReservedConnections(list, currentThread);
+        if (LOG.isTraceEnabled() && list.size() < listSize) {
+            LOG.trace("The list of connections for thread \"{}\" was shortened from {} to {} due to connections closed in the meantime.", currentThread.getName(), listSize, list.size());
+        }
         if (list.size() == dbConfig.getMaxConnections())
-            throw new UnobtainableConnectionException("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool.");
+            LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
         Connection conn = getConn();
         list.add(conn);
+        LOG.trace("Reserving connection {} for thread \"{}\". This thread has now {} connections reserved.", conn, currentThread.getName(), list.size());
         return conn;
     }
 
@@ -3905,7 +3913,8 @@ public class DataBaseConnector {
      */
     public void releaseConnections() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> connectionList = null;
+        LOG.trace("Releasing all connections held for Thread \"{}\"", currentThread.getName());
+        List<Connection> connectionList;
         try {
             connectionList = connectionCache.get(currentThread);
         } catch (ExecutionException e) {
@@ -3913,8 +3922,10 @@ public class DataBaseConnector {
         }
         for (Connection conn : connectionList) {
             try {
-                if (!conn.isClosed())
+                if (!conn.isClosed()) {
+                    LOG.trace("Closing connection {}", conn);
                     conn.close();
+                }
             } catch (SQLException e) {
                 LOG.error("Could not release connection back to the pool", e);
             }
@@ -3933,8 +3944,9 @@ public class DataBaseConnector {
      */
     public void releaseConnection(Connection conn) {
         Thread currentThread = Thread.currentThread();
+        LOG.trace("Trying to release connection {} for thread \"{}\"", conn, currentThread.getName());
         try {
-            List<Connection> connectionList = null;
+            List<Connection> connectionList;
             try {
                 connectionList = connectionCache.get(currentThread);
             } catch (ExecutionException e) {
