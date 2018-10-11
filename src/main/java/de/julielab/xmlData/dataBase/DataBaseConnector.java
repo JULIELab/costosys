@@ -3796,8 +3796,9 @@ public class DataBaseConnector {
         cleanClosedReservedConnections(list, currentThread);
         if (list.isEmpty())
             throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
-        // Currently, we only can have a single connection per thread. More might required in the future perhaps.
-        return list.get(0);
+        // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
+        // a method can be sure that it reserves a connection for its subcalls.
+        return list.get(list.size()-1);
     }
 
     /**
