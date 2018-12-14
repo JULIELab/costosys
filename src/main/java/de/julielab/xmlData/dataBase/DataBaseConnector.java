@@ -3763,6 +3763,7 @@ public class DataBaseConnector {
      */
     public Connection obtainConnection() {
         Thread currentThread = Thread.currentThread();
+        LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
         List<Connection> list;
         try {
             list = connectionCache.get(currentThread);
@@ -3796,11 +3797,14 @@ public class DataBaseConnector {
      * @see #releaseConnection(CoStoSysConnection)
      */
     public CoStoSysConnection obtainOrReserveConnection() {
+        LOG.trace("Connection requested, obtained or newly reserved");
         Connection connection;
         int reservedConnections = getNumReservedConnections();
         if (reservedConnections == 0) {
+            LOG.trace("No connections are currently reserved for thread {}, reserving one", Thread.currentThread().getName());
             connection = reserveConnection();
         } else {
+            LOG.trace("There are connections available, obtaining one");
             connection = obtainConnection();
         }
         return new CoStoSysConnection(this, connection, reservedConnections == 0);
@@ -3808,13 +3812,15 @@ public class DataBaseConnector {
 
     public int getNumReservedConnections() {
         Thread currentThread = Thread.currentThread();
-        List<Connection> list = null;
+        List<Connection> list;
         try {
             list = connectionCache.get(currentThread);
         } catch (ExecutionException e) {
             throw new RuntimeException(e);
         }
+        LOG.trace("Currently, there are {} connections reserved for thread {}", list.size(), Thread.currentThread().getName());
         cleanClosedReservedConnections(list, currentThread);
+        LOG.trace("After cleaning, {} connections remain for thread", Thread.currentThread().getName());
         return list.size();
     }
 
@@ -3824,6 +3830,7 @@ public class DataBaseConnector {
      * @param list The list of reserved connections of a thread.
      */
     private void cleanClosedReservedConnections(List<Connection> list, Thread thread) {
+        LOG.trace("Cleaning already closed connections from the list of reserved connections for thread {}", thread.getName());
         Iterator<Connection> it = list.iterator();
         while (it.hasNext()) {
             Connection conn = it.next();
