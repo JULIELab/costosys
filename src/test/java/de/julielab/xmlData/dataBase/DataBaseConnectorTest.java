@@ -83,16 +83,16 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testRandomSubset() throws SQLException {
-        Connection conn = dbc.reserveConnection();
-        dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
-        dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM randomsubset");
-        int numrows = 0;
-        while (rs.next()) {
-            numrows++;
+        try(CoStoSysConnection conn = dbc.reserveConnection()) {
+            dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
+            dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM randomsubset");
+            int numrows = 0;
+            while (rs.next()) {
+                numrows++;
+            }
+            assertThat(numrows).isEqualTo(10);
         }
-        assertThat(numrows).isEqualTo(10);
-        dbc.releaseConnections();
     }
 
     @Test(dependsOnMethods = "testRetrieveAndMark")

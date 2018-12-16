@@ -1989,13 +1989,6 @@ public class DataBaseConnector {
         return resetSubset(conn, subsetTableName, pkValues, activeTableSchema);
     }
 
-    /**
-     * @param pkValues
-     * @param sqlFormatString
-     * @param schemaName
-     * @return
-     * @see #resetSubset(Connection, String, List, String)
-     */
     public int[] performBatchUpdate(CoStoSysConnection conn, List<Object[]> pkValues, String sqlFormatString, String schemaName) {
 
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
@@ -3116,6 +3109,9 @@ public class DataBaseConnector {
                     .executeQuery(sql);
             final DataBaseConnector dbc = this;
 
+            // We need to keep the connection open until the iterator has finished. It will close the connection
+            // when all items have been returned, effectively decreasing the usage level of the CoStoSysConnection.
+            conn.incrementUsageNumber();
             DBCIterator<byte[][]> it = new DBCIterator<byte[][]>() {
 
                 private long returnedDocs = 0;
@@ -3175,11 +3171,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
-                    try {
-                        conn.release();
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
+                    conn.close();
                 }
 
             };
@@ -3509,7 +3501,7 @@ public class DataBaseConnector {
         String update = "UPDATE " + subsetTableName + " SET is_processed = TRUE, is_in_process = FALSE" + " WHERE "
                 + whereArgument;
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()){
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             conn.setAutoCommit(false);
 
             PreparedStatement processed = conn.prepareStatement(update);
@@ -3549,7 +3541,7 @@ public class DataBaseConnector {
         String whereArgument = StringUtils.join(fieldConfig.expandPKNames("%s = ?"), " AND ");
         String update = "UPDATE " + subsetTableName + " SET has_errors = TRUE, log = ?" + " WHERE " + whereArgument;
 
-        try( CoStoSysConnection conn = obtainOrReserveConnection()){
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             conn.setAutoCommit(false);
 
             PreparedStatement processed = conn.prepareStatement(update);
@@ -3628,7 +3620,7 @@ public class DataBaseConnector {
     }
 
     public boolean isDatabaseReachable() {
-        try (CoStoSysConnection ignored = obtainOrReserveConnection()){
+        try (CoStoSysConnection ignored = obtainOrReserveConnection()) {
             return true;
         } catch (Exception e) {
             LOG.warn("Got error when trying to connect to {}: {}", getDbURL(), e.getMessage());
@@ -3738,7 +3730,7 @@ public class DataBaseConnector {
     }
 
     public void resetSubset(String subsetTableName, List<Object[]> pkValues) {
-        try(CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainConnection()) {
             resetSubset(conn, subsetTableName, pkValues);
         }
 
@@ -3814,7 +3806,7 @@ public class DataBaseConnector {
         }
         LOG.trace("Currently, there are {} connections reserved for thread {}", list.size(), Thread.currentThread().getName());
         cleanClosedReservedConnections(list, currentThread);
-        LOG.trace("After cleaning, {} connections remain for thread", Thread.currentThread().getName());
+        LOG.trace("After cleaning, {} connections remain for thread {}", list.size(), Thread.currentThread().getName());
         return list.size();
     }
 
@@ -3830,7 +3822,7 @@ public class DataBaseConnector {
             CoStoSysConnection conn = it.next();
             try {
                 if (conn.getConnection().isClosed()) {
-                    LOG.trace("Removing connection {} from the list for thread \"{}\" because it is closed.", conn, thread.getName());
+                    LOG.trace("Removing connection {} from the list for thread \"{}\" because it is closed.", conn.getConnection(), thread.getName());
                     it.remove();
                 }
             } catch (SQLException e) {
@@ -3901,7 +3893,7 @@ public class DataBaseConnector {
             try {
                 if (!conn.getConnection().isClosed()) {
                     LOG.trace("Closing connection {}", conn);
-                    conn.close();
+                    conn.getConnection().close();
                 }
             } catch (SQLException e) {
                 LOG.error("Could not release connection back to the pool", e);
@@ -3921,7 +3913,7 @@ public class DataBaseConnector {
      */
     public void releaseConnection(CoStoSysConnection conn) throws SQLException {
         Thread currentThread = Thread.currentThread();
-        LOG.trace("Trying to release connection {} for thread \"{}\"", conn, currentThread.getName());
+        LOG.trace("Releasing connection {} for thread \"{}\"", conn.getConnection(), currentThread.getName());
         List<CoStoSysConnection> connectionList;
         try {
             connectionList = connectionCache.get(currentThread);

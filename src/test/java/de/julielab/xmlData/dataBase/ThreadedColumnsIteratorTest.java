@@ -35,7 +35,7 @@ public class ThreadedColumnsIteratorTest {
 
     @Test
     public void testIterator() throws SQLException {
-        try (Connection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection()) {
             ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
             int numRetrieved = 0;
             while (it.hasNext()) {
@@ -82,7 +82,7 @@ public class ThreadedColumnsIteratorTest {
 
     @Test
     public void testIteratorWithLimit() throws SQLException {
-        try (Connection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection()) {
             ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
             int numRetrieved = 0;
             while (it.hasNext()) {

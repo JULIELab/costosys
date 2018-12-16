@@ -191,7 +191,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                         new Object[]{i, fields.get(i), retrievedData != null ? retrievedData[i] : null});
                 throw e;
             }
-            log.debug("ArrayResToListThread has finished" );
+            log.debug("ArrayResToListThread has finished");
         }
 
         /**
@@ -322,14 +322,10 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 e.printStackTrace();
             } finally {
                 if (closeConnection) {
-                    try {
-                        conn.close();
-                    } catch (SQLException e) {
-                        log.error("Could not close connection", e);
-                    }
+                    conn.close();
                 }
             }
-            log.debug("ArrayFromDBThread has finished" );
+            log.debug("ArrayFromDBThread has finished");
         }
 
         /**
@@ -394,11 +390,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
 
         @Override
         public void closeConnection() {
-            try {
-                conn.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+            conn.close();
         }
     }
 }

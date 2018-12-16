@@ -31,12 +31,12 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         this(dbc, null, keys, fields, table, schemaName);
     }
 
-    public ThreadedColumnsIterator(DataBaseConnector dbc, Connection conn, List<String[]> keys, List<String> fields, String table, String schemaName) {
+    public ThreadedColumnsIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<String[]> keys, List<String> fields, String table, String schemaName) {
         this(dbc, conn, keys, fields, table, -1, schemaName);
     }
 
     // To query by PMID, uses two other threads
-    public ThreadedColumnsIterator(DataBaseConnector dbc, Connection conn, List<String[]> keys, List<String> fields, String table, long limit, String schemaName) {
+    public ThreadedColumnsIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<String[]> keys, List<String> fields, String table, long limit, String schemaName) {
         LOG.trace("Initializing iterator to read {} values from table {} for the columns {}", keys.size(), table, fields);
         this.dbc = dbc;
         backgroundThread = new ResToListThread(conn, listExchanger, keys, fields, table, limit, schemaName);
@@ -47,7 +47,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         this(dbc, null, fields, table);
     }
 
-    public ThreadedColumnsIterator(DataBaseConnector dbc, Connection conn, List<String> fields, String table) {
+    public ThreadedColumnsIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<String> fields, String table) {
         this(dbc, conn, fields, table, -1);
     }
 
@@ -56,7 +56,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     }
 
     // To query all, uses only one other thread
-    public ThreadedColumnsIterator(DataBaseConnector dbc, Connection conn, List<String> fields, String table, long limit) {
+    public ThreadedColumnsIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<String> fields, String table, long limit) {
         LOG.trace("Initializing iterator to read all values from table {} for the columns {}", table, fields);
         this.dbc = dbc;
         backgroundThread = new ListFromDBThread(conn, listExchanger, fields, table, limit);
@@ -91,7 +91,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private ResultSet currentRes;
         private List<Object[]> currentList;
 
-        ResToListThread(Connection conn, Exchanger<List<Object[]>> listExchanger, List<String[]> keys, List<String> fields, String table,
+        ResToListThread(CoStoSysConnection conn, Exchanger<List<Object[]>> listExchanger, List<String[]> keys, List<String> fields, String table,
                         long limit, String schemaName) {
             this.listExchanger = listExchanger;
             this.fields = fields;
@@ -157,11 +157,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private Exchanger<ResultSet> resExchanger;
         private String statement;
         private ResultSet currentRes;
-        private Connection conn;
+        private CoStoSysConnection conn;
         private FieldConfig fieldConfig;
         private long limit;
 
-        public FromDBThread(Connection conn, Exchanger<ResultSet> resExchanger, List<String[]> keys, List<String> fields, String table,
+        public FromDBThread(CoStoSysConnection conn, Exchanger<ResultSet> resExchanger, List<String[]> keys, List<String> fields, String table,
                             long limit, String schemaName) {
             this.limit = limit;
             closeConnection = conn == null;
@@ -233,11 +233,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
         @Override
         public void closeConnection() {
-            try {
-                conn.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+            conn.close();
         }
     }
 
@@ -255,10 +251,10 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         private List<Object[]> currentList;
         private String selectFrom;
         private ResultSet res;
-        private Connection conn;
+        private CoStoSysConnection conn;
         private boolean closeConnection;
 
-        public ListFromDBThread(Connection conn, Exchanger<List<Object[]>> listExchanger, List<String> fields, String table, long limit) {
+        public ListFromDBThread(CoStoSysConnection conn, Exchanger<List<Object[]>> listExchanger, List<String> fields, String table, long limit) {
             this.listExchanger = listExchanger;
             this.fields = fields;
             selectFrom = String.format("SELECT %s FROM %s %s", StringUtils.join(fields, ","), table, limit > 0 ? " LIMIT " + limit : "");
@@ -338,12 +334,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         @Override
         public void closeConnection() {
             if (closeConnection) {
-                try {
-                    log.trace("Closing connection {}", conn);
-                    conn.close();
-                } catch (SQLException e) {
-                    log.error("Could not close connection", e);
-                }
+                conn.close();
             }
 
         }

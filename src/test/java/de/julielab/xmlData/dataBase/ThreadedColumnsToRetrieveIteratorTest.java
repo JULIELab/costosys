@@ -36,7 +36,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
 
     @Test
     public void testIterator() throws Exception {
-        try (Connection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection()) {
             ThreadedColumnsToRetrieveIterator it = new ThreadedColumnsToRetrieveIterator(dbc, conn, Arrays.<Object[]>asList(new Object[]{"10922238"}), Constants.DEFAULT_DATA_TABLE_NAME, "medline_2016");
             int numRetrieved = 0;
             while (it.hasNext()) {

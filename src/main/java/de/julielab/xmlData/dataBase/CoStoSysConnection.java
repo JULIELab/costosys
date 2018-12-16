@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoStoSysConnection implements AutoCloseable {
@@ -17,16 +18,17 @@ public class CoStoSysConnection implements AutoCloseable {
         this.dbc = dbc;
 
         this.connection = connection;
-        numUsing.set(1);
+        numUsing = new AtomicInteger(1);
     }
 
     public void incrementUsageNumber() {
-        log.trace("Connection {} is now used {} times", connection, numUsing.get());
         numUsing.incrementAndGet();
+        log.trace("Increased usage: Connection {} is now used {} times", connection, numUsing.get());
     }
 
     public synchronized void release() throws SQLException {
         final int num = numUsing.decrementAndGet();
+        log.trace("Decreased usage: Connection {} is now used {} times", connection, numUsing.get());
         if (num == 0) {
             log.trace("Connection {} is not used any more and is released", connection);
             dbc.releaseConnection(this);
