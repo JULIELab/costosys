@@ -35,7 +35,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
     private DataBaseConnector dbc;
 
     // To query by PMID, uses two other threads
-    public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, Connection conn, List<Object[]> ids, String table, String schemaName) {
+    public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<Object[]> ids, String table, String schemaName) {
         this.dbc = dbc;
         String[] tables = new String[1];
         String[] schemaNames = new String[1];
@@ -54,7 +54,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
     }
 
     // To query by PMID, uses two other threads
-    public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, Connection conn, List<Object[]> ids, String table, String whereClause, String schemaName) {
+    public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<Object[]> ids, String table, String whereClause, String schemaName) {
         this.dbc = dbc;
         String[] tables = new String[1];
         String[] schemaNames = new String[1];
@@ -76,7 +76,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
      * @param schemaNames A parallel array to <code>tables</code> thas specifies the table schema name of each table.
      * @return The joined data from the requested tables.
      */
-    public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, Connection conn, List<Object[]> ids, String[] tables, String[] schemaNames) {
+    public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<Object[]> ids, String[] tables, String[] schemaNames) {
         this.dbc = dbc;
         backgroundThread = new ArrayResToListThread(conn, listExchanger, ids, tables, null, schemaNames);
         update();
@@ -126,7 +126,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         private boolean joined = false;
         private volatile boolean end = false;
 
-        ArrayResToListThread(Connection conn, Exchanger<List<byte[][]>> listExchanger, List<Object[]> keyList, String[] tables,
+        ArrayResToListThread(CoStoSysConnection conn, Exchanger<List<byte[][]>> listExchanger, List<Object[]> keyList, String[] tables,
                              String whereClause, String[] schemaName) {
             this.listExchanger = listExchanger;
             this.schemaName = schemaName;
@@ -228,7 +228,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         private StringBuilder queryBuilder;
         private ResultSet currentRes;
         private String selectFrom;
-        private Connection conn;
+        private CoStoSysConnection conn;
         private String whereClause = null;
         private FieldConfig fieldConfig;
         private volatile boolean end;
@@ -236,10 +236,10 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         private String dataTable;
         private String dataSchema;
 
-        public ArrayFromDBThread(Connection conn, Exchanger<ResultSet> resExchanger, List<Object[]> keyList, String[] table,
+        public ArrayFromDBThread(CoStoSysConnection conn, Exchanger<ResultSet> resExchanger, List<Object[]> keyList, String[] table,
                                  String whereClause, String[] schemaName) {
             closeConnection = conn == null;
-            this.conn = conn != null ? conn : dbc.reserveConnection();
+            this.conn = conn != null ? conn : dbc.obtainOrReserveConnection();
             this.resExchanger = resExchanger;
             keyIter = keyList.iterator();
             this.queryBuilder = new StringBuilder();
