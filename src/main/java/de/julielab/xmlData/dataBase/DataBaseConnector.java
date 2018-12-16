@@ -3805,8 +3805,10 @@ public class DataBaseConnector {
             throw new RuntimeException(e);
         }
         LOG.trace("Currently, there are {} connections reserved for thread {}", list.size(), Thread.currentThread().getName());
-        cleanClosedReservedConnections(list, currentThread);
-        LOG.trace("After cleaning, {} connections remain for thread {}", list.size(), Thread.currentThread().getName());
+        if (!list.isEmpty()) {
+            cleanClosedReservedConnections(list, currentThread);
+            LOG.trace("After cleaning, {} connections remain for thread {}", list.size(), Thread.currentThread().getName());
+        }
         return list.size();
     }
 
