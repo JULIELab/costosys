@@ -48,5 +48,17 @@ public class ThreadedColumnsToRetrieveIteratorTest {
         }
     }
 
+    @Test
+    public void testIteratorWithoutExternalConnection() throws Exception {
+        ThreadedColumnsToRetrieveIterator it = new ThreadedColumnsToRetrieveIterator(dbc, null, Arrays.<Object[]>asList(new Object[]{"10922238"}), Constants.DEFAULT_DATA_TABLE_NAME, "medline_2016");
+        int numRetrieved = 0;
+        while (it.hasNext()) {
+            Object[] next = it.next();
+            Arrays.toString(next);
+            numRetrieved++;
+        }
+        assertEquals(1, numRetrieved);
+    }
+
 
 }

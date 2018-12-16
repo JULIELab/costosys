@@ -51,6 +51,7 @@ import java.sql.*;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.function.*;
 import java.util.stream.Collectors;
@@ -3865,6 +3866,14 @@ public class DataBaseConnector {
      * @see #releaseConnections()
      */
     public CoStoSysConnection reserveConnection() {
+        if (LOG.isTraceEnabled()) {
+            final ConcurrentMap<Thread, List<CoStoSysConnection>> map = connectionCache.asMap();
+            LOG.trace("Current connection allocation:" );
+            for (Thread t : map.keySet()) {
+                LOG.trace("Thread '{}':\t{}",t.getName(), map.get(t).size() );
+            }
+        }
+
         Thread currentThread = Thread.currentThread();
         LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
         List<CoStoSysConnection> list;
@@ -3935,8 +3944,9 @@ public class DataBaseConnector {
         } catch (ExecutionException e) {
             throw new RuntimeException(e);
         }
-        if (!connectionList.remove(conn))
-            throw new IllegalArgumentException("A connection should be released that is not associated with thread \"" + currentThread.getName() + "\".");
+        // Note that this will not remove anything if the connection is closed by a different thread than the originally reserving one.
+        // This shouldn't be an issue, however, since we clean up closed connections regularly.
+        connectionList.remove(conn);
         conn.getConnection().close();
     }
 

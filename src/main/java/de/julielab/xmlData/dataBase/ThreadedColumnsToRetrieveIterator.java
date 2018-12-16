@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -222,7 +221,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
      */
     private class ArrayFromDBThread extends Thread implements ConnectionClosable {
         private final Logger log = LoggerFactory.getLogger(ArrayFromDBThread.class);
-        private final boolean closeConnection;
+        private final boolean externalConnectionGiven;
         private Iterator<Object[]> keyIter;
         private Exchanger<ResultSet> resExchanger;
         private StringBuilder queryBuilder;
@@ -238,8 +237,8 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
 
         public ArrayFromDBThread(CoStoSysConnection conn, Exchanger<ResultSet> resExchanger, List<Object[]> keyList, String[] table,
                                  String whereClause, String[] schemaName) {
-            closeConnection = conn == null;
-            this.conn = conn != null ? conn : dbc.obtainOrReserveConnection();
+            externalConnectionGiven = conn != null;
+            this.conn = conn;
             this.resExchanger = resExchanger;
             keyIter = keyList.iterator();
             this.queryBuilder = new StringBuilder();
@@ -312,6 +311,10 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
          * subset table.
          */
         public void run() {
+            if (!externalConnectionGiven)
+                this.conn = dbc.obtainOrReserveConnection();
+            else
+                this.conn.incrementUsageNumber();
             try {
                 while (keyIter.hasNext() && !end) {
                     currentRes = getFromDB();
@@ -321,9 +324,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
-                if (closeConnection) {
-                    conn.close();
-                }
+                closeConnection();
             }
             log.debug("ArrayFromDBThread has finished");
         }

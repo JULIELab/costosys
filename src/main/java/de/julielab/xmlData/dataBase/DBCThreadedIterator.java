@@ -1,5 +1,7 @@
 package de.julielab.xmlData.dataBase;
 
+import de.julielab.xmlData.dataBase.util.CoStoSysSQLRuntimeException;
+
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Exchanger;
@@ -58,7 +60,7 @@ public abstract class DBCThreadedIterator<E> extends DBCIterator<E> {
 			} else
 				currentListIter = list.iterator();
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			throw new CoStoSysSQLRuntimeException(e);
 		}
 	}
 
