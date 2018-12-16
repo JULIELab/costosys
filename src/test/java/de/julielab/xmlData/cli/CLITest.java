@@ -33,6 +33,7 @@ public class CLITest {
     @AfterClass
     public static void shutdown(){
         postgres.stop();
+        dbc.close();
     }
 
     @Test
@@ -41,7 +42,6 @@ public class CLITest {
         dbc.reserveConnection();
         assertThat(dbc.tableExists(Constants.DEFAULT_DATA_TABLE_NAME));
         assertThat(dbc.getNumRows(Constants.DEFAULT_DATA_TABLE_NAME)).isEqualTo(177);
-        dbc.close();
     }
 
     @Test(dependsOnMethods = "testImport")

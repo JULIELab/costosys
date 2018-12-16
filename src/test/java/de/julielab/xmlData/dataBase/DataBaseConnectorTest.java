@@ -32,7 +32,7 @@ public class DataBaseConnectorTest {
 
     @AfterClass
     public static void shutdown(){
-        postgres.stop();
+        postgres.stop();dbc.close();
     }
 
 
@@ -45,7 +45,7 @@ public class DataBaseConnectorTest {
                 e.printStackTrace();
             }
         });
-        boolean exists = dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mytable"));
+       boolean exists = dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mytable"));
         assertThat(exists).isTrue();
     }
     @Test

@@ -22,6 +22,7 @@ import com.google.common.cache.LoadingCache;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
+import com.zaxxer.hikari.pool.HikariProxyConnection;
 import de.julielab.hiddenConfig.HiddenConfig;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
@@ -119,6 +120,7 @@ public class DataBaseConnector {
                     return new ArrayList<>();
                 }
             });
+    private static HikariDataSource dataSource;
 
     static {
         subsetColumns = new LinkedHashMap<>();
@@ -147,7 +149,6 @@ public class DataBaseConnector {
     private String dbURL;
     private String user;
     private String password;
-    private DataSource dataSource;
     private ConfigReader config;
 
     /**************************************************************************
@@ -341,23 +342,25 @@ public class DataBaseConnector {
     Connection getConn() {
 
         Connection conn = null;
-        if (null == dataSource || ((HikariDataSource) dataSource).isClosed()) {
-            LOG.debug("Setting up connection pool data source");
-            HikariConfig hikariConfig = new HikariConfig();
-            hikariConfig.setPoolName("costosys-" + System.nanoTime());
-            hikariConfig.setJdbcUrl(dbURL);
-            hikariConfig.setUsername(user);
-            hikariConfig.setPassword(password);
-            hikariConfig.setConnectionTestQuery("SELECT TRUE");
-            hikariConfig.setMaximumPoolSize(dbConfig.getMaxConnections());
-            // required to be able to get the number of idle connections, see below
-            hikariConfig.setRegisterMbeans(true);
-            HikariDataSource ds = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
-            if (ds.isClosed()) {
-                ds = new HikariDataSource(hikariConfig);
+        synchronized (DataBaseConnector.class) {
+            if (null == dataSource || ((HikariDataSource) dataSource).isClosed()) {
+                LOG.debug("Setting up connection pool data source");
+                HikariConfig hikariConfig = new HikariConfig();
+                hikariConfig.setPoolName("costosys-" + System.nanoTime());
+                hikariConfig.setJdbcUrl(dbURL);
+                hikariConfig.setUsername(user);
+                hikariConfig.setPassword(password);
+                hikariConfig.setConnectionTestQuery("SELECT TRUE");
+                hikariConfig.setMaximumPoolSize(dbConfig.getMaxConnections());
+                // required to be able to get the number of idle connections, see below
+                hikariConfig.setRegisterMbeans(true);
+                HikariDataSource ds = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
+                if (ds.isClosed()) {
+                    ds = new HikariDataSource(hikariConfig);
+                }
+                pools.put(dbURL, ds);
+                dataSource = ds;
             }
-            pools.put(dbURL, ds);
-            dataSource = ds;
         }
 
         try {
@@ -366,24 +369,17 @@ public class DataBaseConnector {
                 try {
                     LOG.trace("Waiting for SQL connection to become free...");
                     if (LOG.isTraceEnabled()) {
-                        // from https://github.com/brettwooldridge/HikariCP/wiki/MBean-(JMX)-Monitoring-and-Management
-                        MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
-                        try {
-                            String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
-                            ObjectName poolName = new ObjectName("com.zaxxer.hikari:type=Pool (" + poolNameStr + ")");
-                            HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
-                            int totalConnections = poolProxy.getTotalConnections();
-                            int idleConnections = poolProxy.getIdleConnections();
-                            int activeConnections = poolProxy.getActiveConnections();
-                            int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
-                            LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
-                            LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
-                            LOG.trace("Pool {} has {} active connections", poolName, activeConnections);
-                            LOG.trace("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
+                        String poolName = dataSource.getPoolName();
+                        HikariPoolMXBean poolProxy = dataSource.getHikariPoolMXBean();
+                        int totalConnections = poolProxy.getTotalConnections();
+                        int idleConnections = poolProxy.getIdleConnections();
+                        int activeConnections = poolProxy.getActiveConnections();
+                        int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
+                        LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
+                        LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
+                        LOG.trace("Pool {} has {} active connections", poolName, activeConnections);
+                        LOG.trace("Pool {} has {} threads awaiting a connection", poolName, threadsAwaitingConnection);
 
-                        } catch (MalformedObjectNameException e) {
-                            e.printStackTrace();
-                        }
                     }
                     conn = dataSource.getConnection();
                     // conn = DriverManager.getConnection(fullURI);
@@ -437,6 +433,7 @@ public class DataBaseConnector {
         }
         return conn;
     }
+
 
     /**
      * @return the activeDataTable
@@ -3614,9 +3611,17 @@ public class DataBaseConnector {
 
     public void close() {
         releaseConnections();
-        LOG.debug("Shutting down DataBaseConnector, closing data source.");
-        if (dataSource instanceof HikariDataSource)
-            ((HikariDataSource) dataSource).close();
+        LOG.debug("Shutting down DataBaseConnector.");
+        if (dataSource instanceof HikariDataSource) {
+            LOG.debug("Checking if the datasource is still in use (perhaps by other threads or other DBC instances)");
+            final int activeConnections = dataSource.getHikariPoolMXBean().getActiveConnections();
+            if (activeConnections > 0) {
+                LOG.debug("Data source is still in use ({} connections active), not closing it. Another DBC instance should exist that will attempt closing the data source at a later time point.", activeConnections);
+            } else {
+                LOG.debug("Data source does not have active connections, closing it.");
+                dataSource.close();
+            }
+        }
     }
 
     public boolean isDatabaseReachable() {
