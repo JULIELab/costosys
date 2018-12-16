@@ -336,6 +336,10 @@ public class DataBaseConnector {
         LOG.debug("Changing database password.");
     }
 
+    public void setMaxConnections(int num) {
+        dbConfig.setMaxConnections(num);
+    }
+
     /**
      * @return A Connection to the database.
      */
@@ -393,7 +397,7 @@ public class DataBaseConnector {
                     stm.close();
                 } catch (SQLException e) {
                     LOG.warn("SQLException occurred:", e);
-                    LOG.warn("Could not obtain a database connection within the timeout. Trying again. Number of try: {}", ++retries);
+                    LOG.warn("Could not obtain a database connection within the timeout for thread {}. Trying again. Number of try: {}", Thread.currentThread().getName(), ++retries);
                     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
                     try {
                         String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
@@ -3615,9 +3619,12 @@ public class DataBaseConnector {
         if (dataSource instanceof HikariDataSource) {
             LOG.debug("Checking if the datasource is still in use (perhaps by other threads or other DBC instances)");
             final int activeConnections = dataSource.getHikariPoolMXBean().getActiveConnections();
+            final int awaitingConnection = dataSource.getHikariPoolMXBean().getThreadsAwaitingConnection();
             if (activeConnections > 0) {
                 LOG.debug("Data source is still in use ({} connections active), not closing it. Another DBC instance should exist that will attempt closing the data source at a later time point.", activeConnections);
-            } else {
+            } else if (awaitingConnection > 0) {
+                LOG.debug("There are no active connections right now but {} threads await a connection. Letting the data source open. Another DBC instance should close it later.", awaitingConnection);
+            } else{
                 LOG.debug("Data source does not have active connections, closing it.");
                 dataSource.close();
             }
@@ -3766,6 +3773,7 @@ public class DataBaseConnector {
         // a method can be sure that it reserves a connection for its subcalls.
         final CoStoSysConnection conn = list.get(list.size() - 1);
         conn.incrementUsageNumber();
+        LOG.trace("Returning already reserved connection for thread {}",currentThread.getName() );
         return conn;
     }
 
