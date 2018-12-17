@@ -113,7 +113,8 @@ public class DataBaseConnector {
     private static LoadingCache<Thread, List<CoStoSysConnection>> connectionCache = CacheBuilder
             .newBuilder()
             // The weak keys are the main reason to use the cache. It allows to garbage collect the threads
-            // that have reserved connections and did never release them.
+            // that have reserved connections and did never release them. Those threads would be held in memory
+            // when we used strong references which would be a memory leak.
             .weakKeys()
             .build(new CacheLoader<Thread, List<CoStoSysConnection>>() {
                 @Override
@@ -572,9 +573,8 @@ public class DataBaseConnector {
         Connection conn = null;
         boolean idsRetrieved = false;
         while (!idsRetrieved) {
-            try {
+            try (CoStoSysConnection costoConn = obtainOrReserveConnection()){
                 FieldConfig fieldConfig = fieldConfigs.get(schemaName);
-                CoStoSysConnection costoConn = obtainConnection();
                 conn = costoConn.getConnection();
 
                 conn.setAutoCommit(false);
@@ -688,7 +688,7 @@ public class DataBaseConnector {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         int rows = 0;
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             if (whereCondition != null) {
                 whereCondition = whereCondition.trim();
                 if (!whereCondition.toUpperCase().startsWith("WHERE"))
@@ -719,7 +719,7 @@ public class DataBaseConnector {
     public boolean hasUnfetchedRows(String tableName, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             ResultSet res = conn.createStatement()
                     .executeQuery("SELECT " + fieldConfig.getPrimaryKeyString() + " FROM " + tableName + " WHERE "
                             + Constants.IN_PROCESS + " = FALSE AND " + Constants.IS_PROCESSED + " = FALSE LIMIT 1");
@@ -804,7 +804,7 @@ public class DataBaseConnector {
     public void modifyTable(String sql, List<Object[]> ids, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             String where = StringUtils.join(fieldConfig.expandPKNames("%s = ?"), " AND ");
             String fullSQL = sql + where;
             PreparedStatement ps = null;
@@ -1030,7 +1030,7 @@ public class DataBaseConnector {
      * @throws CoStoSysSQLRuntimeException If the SQL command fails.
      */
     private void createTable(String tableName, List<String> columns, String comment) {
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             StringBuilder sb = new StringBuilder("CREATE TABLE " + tableName + " (");
             for (String column : columns)
                 sb.append(", " + column);
@@ -1284,7 +1284,7 @@ public class DataBaseConnector {
     public boolean isSubsetTable(String table) {
         if (table == null)
             return false;
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             String pgSchema = dbConfig.getActivePGSchema();
             String tableName = table;
             if (table.contains(".")) {
@@ -1313,7 +1313,7 @@ public class DataBaseConnector {
     }
 
     public boolean dropTable(String table) throws SQLException {
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement stmt = conn.createStatement();
             String sql = "DROP TABLE " + table;
             return stmt.execute(sql);
@@ -1416,7 +1416,7 @@ public class DataBaseConnector {
     public boolean isEmpty(String tableName) {
 
         String sqlStr = "SELECT * FROM " + tableName + " LIMIT 1";
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement st = conn.createStatement();
             ResultSet res = st.executeQuery(sqlStr);
 
@@ -1664,7 +1664,7 @@ public class DataBaseConnector {
         String sql = "INSERT INTO " + subsetTable + " (SELECT %s FROM " + superSetTable + " ORDER BY RANDOM() LIMIT "
                 + size + ");";
         sql = String.format(sql, fieldConfig.getPrimaryKeyString());
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             conn.createStatement().execute(sql);
         } catch (SQLException e) {
             LOG.error(sql);
@@ -1710,7 +1710,7 @@ public class DataBaseConnector {
 
         Statement st;
         String sql = null;
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             st = conn.createStatement();
             for (int i = 0; i < idSize; i += ID_SUBLIST_SIZE) {
                 List<String> subList = i + ID_SUBLIST_SIZE - 1 < idSize ? values.subList(i, i + ID_SUBLIST_SIZE)
@@ -1757,7 +1757,7 @@ public class DataBaseConnector {
                     + "\" can be created since this scheme does not define a primary key.");
 
 
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             String pkStr = fieldConfig.getPrimaryKeyString();
 
             Statement st = conn.createStatement();
@@ -1799,7 +1799,7 @@ public class DataBaseConnector {
 
 
         String stStr = null;
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             if (!whereClause.toUpperCase().startsWith("WHERE"))
                 whereClause = "WHERE " + whereClause;
 
@@ -1859,7 +1859,7 @@ public class DataBaseConnector {
 
         // Add the new subset table to the list of mirror subset tables.
         String sql = null;
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement st = conn.createStatement();
             sql = String.format("INSERT INTO %s VALUES ('%s','%s',%b)", mirrorTableName, supersetTable, subsetTable,
                     performUpdate);
@@ -2728,7 +2728,7 @@ public class DataBaseConnector {
     private void alterTable(String action, String tableName) {
 
         String sqlString = "ALTER TABLE " + tableName + " " + action;
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement st = conn.createStatement();
             st.execute(sqlString);
         } catch (SQLException e) {
@@ -3352,8 +3352,8 @@ public class DataBaseConnector {
      */
     public String getScheme() {
         String scheme = "none";
-        try {
-            ResultSet res = obtainConnection().createStatement().executeQuery("SHOW search_path;");
+        try (CoStoSysConnection conn = obtainOrReserveConnection()){
+            ResultSet res = conn.createStatement().executeQuery("SHOW search_path;");
             if (res.next())
                 scheme = res.getString(1);
         } catch (SQLException e) {
@@ -3625,7 +3625,7 @@ public class DataBaseConnector {
                 LOG.debug("Data source is still in use ({} connections active), not closing it. Another DBC instance should exist that will attempt closing the data source at a later time point.", activeConnections);
             } else if (awaitingConnection > 0) {
                 LOG.debug("There are no active connections right now but {} threads await a connection. Letting the data source open. Another DBC instance should close it later.", awaitingConnection);
-            } else{
+            } else {
                 LOG.debug("Data source does not have active connections, closing it.");
                 dataSource.close();
             }
@@ -3743,7 +3743,7 @@ public class DataBaseConnector {
     }
 
     public void resetSubset(String subsetTableName, List<Object[]> pkValues) {
-        try (CoStoSysConnection conn = obtainConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             resetSubset(conn, subsetTableName, pkValues);
         }
 
@@ -3773,8 +3773,8 @@ public class DataBaseConnector {
         // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
         // a method can be sure that it reserves a connection for its subcalls.
         final CoStoSysConnection conn = list.get(list.size() - 1);
+        LOG.trace("Obtaining already reserved connection {} for thread {}", conn.getConnection(), currentThread.getName());
         conn.incrementUsageNumber();
-        LOG.trace("Returning already reserved connection for thread {}",currentThread.getName() );
         return conn;
     }
 
@@ -3801,11 +3801,11 @@ public class DataBaseConnector {
         CoStoSysConnection connection;
         int reservedConnections = getNumReservedConnections();
         if (reservedConnections == 0) {
-            LOG.trace("No connections are currently reserved for thread {}, reserving one", Thread.currentThread().getName());
             connection = reserveConnection();
         } else {
-            LOG.trace("There are connections available, obtaining one");
             connection = obtainConnection();
+            if (LOG.isTraceEnabled())
+                LOG.trace("There are connections available, obtained {}", connection.getConnection());
         }
         return connection;
     }
@@ -3868,10 +3868,11 @@ public class DataBaseConnector {
     public CoStoSysConnection reserveConnection() {
         if (LOG.isTraceEnabled()) {
             final ConcurrentMap<Thread, List<CoStoSysConnection>> map = connectionCache.asMap();
-            LOG.trace("Current connection allocation:" );
+            StringBuilder sb = new StringBuilder("Current connection allocation:").append("\n");
             for (Thread t : map.keySet()) {
-                LOG.trace("Thread '{}':\t{}",t.getName(), map.get(t).size() );
+                sb.append("Thread '").append(t.getName()).append("':\t\t").append(map.get(t).size()).append("\n");
             }
+            LOG.trace(sb.toString());
         }
 
         Thread currentThread = Thread.currentThread();

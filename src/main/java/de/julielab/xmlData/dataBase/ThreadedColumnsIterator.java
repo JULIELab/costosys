@@ -26,6 +26,9 @@ import java.util.function.Function;
 public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     private final static Logger LOG = LoggerFactory.getLogger(ThreadedColumnsIterator.class);
     private DataBaseConnector dbc;
+    private static int resToListThreadCounter;
+    private static int fromDBThreadCounter;
+    private static int listFromDBThreadCounter;
 
     public ThreadedColumnsIterator(DataBaseConnector dbc, List<String[]> keys, List<String> fields, String table, String schemaName) {
         this(dbc, null, keys, fields, table, schemaName);
@@ -102,6 +105,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+            setName("ResToListThread-"+ ++resToListThreadCounter);
             setDaemon(true);
             start();
         }
@@ -171,6 +175,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             statement = "SELECT " + StringUtils.join(fields, ",") + " FROM " + table + " WHERE ";
             log.trace("Retrieving data for {} primary keys from the database with SQL statement: {}", keys.size(), statement);
             keyIter = keys.iterator();
+            setName("FromDBThread-" + ++fromDBThreadCounter);
             setDaemon(true);
             start();
         }
@@ -275,6 +280,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
             } catch (SQLException e) {
                 e.printStackTrace();
             }
+            setName("ListFromDBThread-"+ ++listFromDBThreadCounter);
             setDaemon(true);
             start();
         }

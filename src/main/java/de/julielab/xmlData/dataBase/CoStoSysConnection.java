@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoStoSysConnection implements AutoCloseable {
@@ -19,16 +18,19 @@ public class CoStoSysConnection implements AutoCloseable {
 
         this.connection = connection;
         numUsing = new AtomicInteger(1);
+        log.trace("Initial usage: Connection {} is now used {} times by thread {}", connection, numUsing.get(), Thread.currentThread().getName());
     }
 
     public void incrementUsageNumber() {
         numUsing.incrementAndGet();
-        log.trace("Increased usage: Connection {} is now used {} times", connection, numUsing.get());
+        if (log.isTraceEnabled())
+            log.trace("Increased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
     }
 
     public synchronized void release() throws SQLException {
         final int num = numUsing.decrementAndGet();
-        log.trace("Decreased usage: Connection {} is now used {} times", connection, numUsing.get());
+        if (log.isTraceEnabled())
+            log.trace("Decreased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
         if (num == 0) {
             log.trace("Connection {} is not used any more and is released", connection);
             dbc.releaseConnection(this);
@@ -54,10 +56,6 @@ public class CoStoSysConnection implements AutoCloseable {
         return connection.createStatement();
     }
 
-    public void setAutoCommit(boolean b) throws SQLException {
-        connection.setAutoCommit(b);
-    }
-
     public PreparedStatement prepareStatement(String sql) throws SQLException {
         return connection.prepareStatement(sql);
     }
@@ -72,5 +70,9 @@ public class CoStoSysConnection implements AutoCloseable {
 
     public boolean getAutoCommit() throws SQLException {
         return connection.getAutoCommit();
+    }
+
+    public void setAutoCommit(boolean b) throws SQLException {
+        connection.setAutoCommit(b);
     }
 }

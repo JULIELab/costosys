@@ -32,6 +32,8 @@ import java.util.concurrent.Exchanger;
 public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[][]> {
     private final static Logger LOG = LoggerFactory.getLogger(ThreadedColumnsToRetrieveIterator.class);
     private DataBaseConnector dbc;
+    private static int arrayResToListThreadCounter;
+    private static int arrayFromDBThreadCounter;
 
     // To query by PMID, uses two other threads
     public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<Object[]> ids, String table, String schemaName) {
@@ -143,6 +145,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+            setName("ArrayRestoListThread-" + ++arrayResToListThreadCounter);
             setDaemon(true);
             start();
         }
@@ -249,6 +252,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 this.joined = true;
             }
             buildSelectFrom(table, schemaName);
+            setName("ArrayFromDBThread-"+ ++arrayFromDBThreadCounter);
             setDaemon(true);
             start();
         }
