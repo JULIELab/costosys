@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/JULIELab/costosys.svg?branch=master)](https://travis-ci.com/JULIELab/costosys)
+
 # CoStoSys
 The Corpus Storage System (CoStoSys) is a tool and abstraction layer for a PostgreSQL document database.
 
