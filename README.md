@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/JULIELab/costosys.svg?branch=master)](https://travis-ci.com/JULIELab/costosys)
+
 # CoStoSys
 The Corpus Storage System (CoStoSys) is a tool and abstraction layer for a PostgreSQL document database.
 
@@ -8,7 +10,6 @@ Please note that the documentation is somewhat out of date. It still presents th
 
 For a rather exhaustive overview of the tool's capabilities, build it by running `mvn clean package` and run `java -jar target/costosys-<version>-cli-assembly.jar` without parameters.
 
-For development, please note that currently multiple tests are ignored. This is due to the fact that they are integration tests and require a running PostgreSQL database. In the past, the JULIE Lab internal database was used which is no longer feasible. We need another solution, e.g. a Dockers image using [testcontainers](https://www.testcontainers.org/).
 
 ## Quickstart
 
