@@ -18,4 +18,6 @@ cache:
     - $HOME/.m2/repository
 
 before_deploy: ./cd/before-deploy.sh
-deploy: ./cd/deploy.sh
+deploy:
+  provider: script
+  script: ./cd/deploy.sh
