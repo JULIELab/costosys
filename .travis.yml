@@ -15,8 +15,7 @@ script: mvn test -B
 
 cache:
   directories:
-    - ~/.m2/repository
+    - $HOME/.m2/repository
 
-after_success:
-  - ./cd/before-deploy.sh
-  - ./cd/deploy.sh
+before_deploy: ./cd/before-deploy.sh
+deploy: ./cd/deploy.sh
