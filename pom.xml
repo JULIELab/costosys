@@ -138,7 +138,7 @@
         <dependency>
             <groupId>org.elasticsearch.client</groupId>
             <artifactId>transport</artifactId>
-            <version>7.0.0-alpha2</version>
+            <version>5.4.0</version>
             <scope>provided</scope>
             <exclusions>
                 <exclusion>
