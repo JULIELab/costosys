@@ -314,7 +314,13 @@ public class CLI {
                     }
                     break;
                 case STATUS:
-                    error = doStatus(dbc, subsetTableName);
+                    error = doStatus(dbc,
+                            subsetTableName,
+                            cmd.hasOption("he"),
+                            cmd.hasOption("isp"),
+                            cmd.hasOption("inp"),
+                            cmd.hasOption("to"),
+                            cmd.hasOption("lc"));
                     break;
 
                 case TABLES:
@@ -441,15 +447,24 @@ public class CLI {
         return input;
     }
 
-    private static boolean doStatus(DataBaseConnector dbc, String subsetTableName) {
+    private static boolean doStatus(DataBaseConnector dbc, String subsetTableName, boolean showHasErrors, boolean showIsProcessed, boolean showIsInProcess, boolean showTotal, boolean showLastComponent) {
         boolean error = false;
         try {
             if (subsetTableName == null) {
                 LOG.error("You must provide the name of a subset table to display its status.");
                 error = true;
             } else {
-                try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
-                    SubsetStatus status = dbc.status(subsetTableName, EnumSet.allOf(DataBaseConnector.StatusElement.class));
+                EnumSet<DataBaseConnector.StatusElement> modes = EnumSet.noneOf(DataBaseConnector.StatusElement.class);
+                if (showHasErrors) modes.add(DataBaseConnector.StatusElement.HAS_ERRORS);
+                if (showIsProcessed) modes.add(DataBaseConnector.StatusElement.IS_PROCESSED);
+                if (showIsInProcess) modes.add(DataBaseConnector.StatusElement.IN_PROCESS);
+                if (showTotal) modes.add(DataBaseConnector.StatusElement.TOTAL);
+                if (showLastComponent) modes.add(DataBaseConnector.StatusElement.LAST_COMPONENT);
+                if (modes.isEmpty())
+                    modes = EnumSet.allOf(DataBaseConnector.StatusElement.class);
+
+                try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
+                    SubsetStatus status = dbc.status(subsetTableName, modes);
                     System.out.println(status);
                 }
             }
@@ -851,7 +866,8 @@ public class CLI {
                         + "-f a partial reset can be achieved by specifying a file containing one primary key value for each document to be resetted",
                 "subset table name"));
         modes.addOption(
-                buildOption("st", "status", "Show the processing status of a subset table.", "subset table name"));
+                buildOption("st", "status", "Show the processing status of a subset table. Generates a small report containing the number of processed and total documents of a subset table. " +
+                        "The report can be customized using the -he, -isp, -inp, -to and -slc switches", "subset table name"));
 
         OptionBuilder.withLongOpt("query");
         OptionBuilder.withDescription("Query a table (default: " + Constants.DEFAULT_DATA_TABLE_NAME
@@ -883,8 +899,7 @@ public class CLI {
 
         options.addOptionGroup(modes);
 
-        // -------------------- OptionGroup for exclusive
-        // parameters--------------
+        // -------------------- OptionGroup for exclusive parameters--------------
         OptionGroup exclusive = new OptionGroup();
 
         exclusive.addOption(buildOption("f", "file",
@@ -902,6 +917,19 @@ public class CLI {
                 buildOption("j", "journals", "Define a subset by providing a file with journal names.", "file"));
         exclusive.addOption(
                 buildOption("l", "limit", "For use with -q. Restricts the number of documents returned.", "limit"));
+
+
+        options.addOption(buildOption("he", "has errors",
+                "Flag for -st(atus) mode to add the 'has errors' statistic to a subset status report."));
+        options.addOption(buildOption("isp", "is processed",
+                "Flag for -st(atus) mode to add the 'is processed' statistic to a subset status report."));
+        options.addOption(buildOption("inp", "is in process",
+                "Flag for -st(atus) mode to add the 'is in process' statistic to a subset status report."));
+        options.addOption(buildOption("to", "total",
+                "Flag for -st(atus) mode to add the 'total' statistic to a subset status report."));
+        options.addOption(buildOption("slc", "show last component",
+                "Flag for -st(atus) mode to add the 'last component' statistic to a subset status report."));
+
 
         options.addOption(buildOption("np", "not processed",
                 "Flag for -re(set) mode to restrict to non-processed table rows. May be combined with -ne, -lc."));
