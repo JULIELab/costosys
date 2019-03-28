@@ -8,31 +8,32 @@ import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.testng.AssertJUnit.assertEquals;
-import static org.assertj.core.api.Assertions.*;
+
 public class DataBaseConnectorTest {
 
     public static PostgreSQLContainer postgres;
     private static DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setup(){
-        postgres =  new PostgreSQLContainer();
+    public static void setup() {
+        postgres = new PostgreSQLContainer();
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
     }
 
     @AfterClass
-    public static void shutdown(){
-        postgres.stop();dbc.close();
+    public static void shutdown() {
+        postgres.stop();
+        dbc.close();
     }
 
 
@@ -45,11 +46,12 @@ public class DataBaseConnectorTest {
                 e.printStackTrace();
             }
         });
-       boolean exists = dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mytable"));
+        boolean exists = dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mytable"));
         assertThat(exists).isTrue();
     }
+
     @Test
-    public void testRetrieveAndMark() throws SQLException, TableSchemaMismatchException {
+    public void testRetrieveAndMark() throws Exception {
         dbc.reserveConnection();
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", Constants.DEFAULT_DATA_TABLE_NAME);
@@ -83,7 +85,7 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testRandomSubset() throws SQLException {
-        try(CoStoSysConnection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection()) {
             dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
             dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM randomsubset");
@@ -112,8 +114,8 @@ public class DataBaseConnectorTest {
     }
 
     @Test
-    public void testXmlData() throws  UnsupportedEncodingException {
-        dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text","XML Test Table"));
+    public void testXmlData() throws UnsupportedEncodingException {
+        dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text", "XML Test Table"));
         Map<String, Object> row = new HashMap<>();
         row.put("docid", "doc1");
         row.put("xmi", "some nonsense");

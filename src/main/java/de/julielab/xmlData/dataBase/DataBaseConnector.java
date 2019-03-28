@@ -505,7 +505,7 @@ public class DataBaseConnector {
      * @param pid             - will be saved in the subset table
      * @return An ArrayList of pmids which have not yet been processed
      */
-    public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid) throws TableSchemaMismatchException {
+    public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid) throws TableSchemaMismatchException, TableNotFoundException {
         return retrieveAndMark(subsetTableName, readerComponent, hostName, pid, RETRIEVE_MARK_LIMIT, null);
     }
 
@@ -530,7 +530,7 @@ public class DataBaseConnector {
      * @see #retrieveAndMark(String, String, String, String, int, String)
      */
     public List<Object[]> retrieveAndMark(String subsetTableName, String readerComponent, String hostName, String pid,
-                                          int limit, String order) throws TableSchemaMismatchException {
+                                          int limit, String order) throws TableSchemaMismatchException, TableNotFoundException {
         return retrieveAndMark(subsetTableName, activeTableSchema, readerComponent, hostName, pid, limit, order);
     }
 
@@ -566,7 +566,7 @@ public class DataBaseConnector {
      * @return An ArrayList of primary keys which have not yet been processed.
      */
     public List<Object[]> retrieveAndMark(String subsetTableName, String schemaName, String readerComponent,
-                                          String hostName, String pid, int limit, String order) throws TableSchemaMismatchException {
+                                          String hostName, String pid, int limit, String order) throws TableSchemaMismatchException, TableNotFoundException {
         checkTableDefinition(subsetTableName, schemaName);
         List<Object[]> ids = new ArrayList<>(limit);
         String sql = null;
@@ -3392,7 +3392,7 @@ public class DataBaseConnector {
      * @param tableName The table to check.
      * @see #checkTableDefinition(String, String)
      */
-    public void checkTableDefinition(String tableName) throws TableSchemaMismatchException {
+    public void checkTableDefinition(String tableName) throws TableSchemaMismatchException, TableNotFoundException {
         checkTableDefinition(tableName, activeTableSchema);
     }
 
@@ -3409,10 +3409,10 @@ public class DataBaseConnector {
      *
      * @param tableName - table to check
      */
-    public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException {
+    public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException, TableNotFoundException {
         try (CoStoSysConnection connection = obtainOrReserveConnection()) {
             if (!tableExists(tableName))
-                throw new IllegalArgumentException("The table '" + tableName + "' does not exist.");
+                throw new TableNotFoundException("The table '" + tableName + "' does not exist.");
             FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
             List<String> actualColumns = new ArrayList<>();

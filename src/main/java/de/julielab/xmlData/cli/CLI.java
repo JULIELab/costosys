@@ -66,7 +66,7 @@ public class CLI {
         LOG.info(msg);
     }
 
-    public static void main(String[] args) throws SQLException, TableSchemaMismatchException, ConfigurationNotFoundException, ConfigurationException, IOException, MedlineUpdateException {
+    public static void main(String[] args) throws Exception {
         long time = System.currentTimeMillis();
         String dbUrl;
         String user;
