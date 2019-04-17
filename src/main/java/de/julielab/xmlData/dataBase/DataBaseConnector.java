@@ -187,6 +187,8 @@ public class DataBaseConnector {
             LOG.warn(
                     "No active database configured in configuration file or configuration file is empty or does not exist.");
         }
+        LOG.info("Active Postgres schema: {}", dbConfig.getActivePGSchema() );
+        LOG.info("Active data Postgres schema: {}", dbConfig.getActiveDataPGSchema() );
     }
 
     /**
