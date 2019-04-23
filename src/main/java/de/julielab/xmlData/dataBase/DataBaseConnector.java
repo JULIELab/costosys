@@ -360,6 +360,7 @@ public class DataBaseConnector {
                 hikariConfig.setPassword(password);
                 hikariConfig.setConnectionTestQuery("SELECT TRUE");
                 hikariConfig.setMaximumPoolSize(dbConfig.getMaxConnections());
+                hikariConfig.setConnectionTimeout(60000);
                 // required to be able to get the number of idle connections, see below
                 hikariConfig.setRegisterMbeans(true);
                 HikariDataSource ds = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
