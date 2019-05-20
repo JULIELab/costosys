@@ -23,7 +23,7 @@ public class DataBaseConnectorTest {
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setup() {
+    public static void setUp() {
         postgres = new PostgreSQLContainer();
         postgres.start();
         dbc = new de.julielab.costosys.dbconnection.DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());

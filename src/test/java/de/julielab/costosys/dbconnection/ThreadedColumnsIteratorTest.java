@@ -21,7 +21,7 @@ public class ThreadedColumnsIteratorTest {
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setup() throws SQLException, IOException {
+    public static void setUp() throws SQLException, IOException {
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
         dbc.reserveConnection();

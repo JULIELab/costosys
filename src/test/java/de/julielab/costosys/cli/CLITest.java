@@ -18,7 +18,7 @@ public class CLITest {
     private static DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setup() throws ConfigurationException {
+    public static void setUp() throws ConfigurationException {
         postgres =  new PostgreSQLContainer();
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
