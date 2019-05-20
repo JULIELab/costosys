@@ -46,28 +46,29 @@ public class Updater  {
 	public void process(DataBaseConnector dbc) throws MedlineUpdateException, IOException {
 		log.info("Updating from {} into database at {}", medlineFile, dbc.getDbURL());
         File[] updateFiles = getMedlineFiles(medlineFile);
-		List<File> unprocessedMedlineUpdates = getUnprocessedMedlineUpdates(updateFiles, dbc);
-		configureDocumentDeleters();
-		// Get the names of all deleters to be applied.
-		String[] configuredDeleters = configuration.getStringArray(ConfigurationConstants.DELETER_NAME);
-		for (File file : unprocessedMedlineUpdates) {
-			log.info("Processing file {}.", file.getAbsoluteFile());
-			dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME);
-			List<String> pmidsToDelete = getPmidsToDelete(file);
-			for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext();) {
-				IDocumentDeleter documentDeleter = it.next();
-				if (!documentDeleter.hasName(configuredDeleters))
-					continue;
-				// This is very hacky. Might work for now, does not scale, of course.
-				if (documentDeleter instanceof MedlineDataTableDocumentDeleter)
-					((MedlineDataTableDocumentDeleter)documentDeleter).setDbc(dbc);
-				documentDeleter.deleteDocuments(pmidsToDelete);
+        if (updateFiles != null && updateFiles.length > 0) {
+			List<File> unprocessedMedlineUpdates = getUnprocessedMedlineUpdates(updateFiles, dbc);
+			configureDocumentDeleters();
+			// Get the names of all deleters to be applied.
+			String[] configuredDeleters = configuration.getStringArray(ConfigurationConstants.DELETER_NAME);
+			for (File file : unprocessedMedlineUpdates) {
+				log.info("Processing file {}.", file.getAbsoluteFile());
+				dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME);
+				List<String> pmidsToDelete = getPmidsToDelete(file);
+				for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
+					IDocumentDeleter documentDeleter = it.next();
+					if (!documentDeleter.hasName(configuredDeleters))
+						continue;
+					// This is very hacky. Might work for now, does not scale, of course.
+					if (documentDeleter instanceof MedlineDataTableDocumentDeleter)
+						((MedlineDataTableDocumentDeleter) documentDeleter).setDbc(dbc);
+					documentDeleter.deleteDocuments(pmidsToDelete);
+				}
+
+				// As last thing, mark the current update file as finished.
+				markFileAsImported(file, dbc);
 			}
-
-			// As last thing, mark the current update file as finished.
-			markFileAsImported(file, dbc);
 		}
-
 	}
 
     protected File[] getMedlineFiles(String medlinePathString) throws FileNotFoundException {
@@ -76,16 +77,13 @@ public class Updater  {
             throw new FileNotFoundException("File \"" + medlinePathString + "\" was not found.");
         if (!medlinePath.isDirectory())
             return new File[] { medlinePath };
-        File[] medlineFiles = medlinePath.listFiles(new FileFilter() {
-            public boolean accept(File file) {
-                String filename = file.getName();
-                return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip");
-            }
+        File[] medlineFiles = medlinePath.listFiles(file -> {
+            String filename = file.getName();
+            return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip");
         });
         // Check whether anything has been read.
         if (medlineFiles == null || medlineFiles.length == 0) {
             log.info("No (g)zipped files found in directory {}. No update will be performed.", medlinePathString);
-            System.exit(0);
         }
         return medlineFiles;
     }
