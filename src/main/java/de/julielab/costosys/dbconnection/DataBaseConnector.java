@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static de.julielab.costosys.dbconnection.DataBaseConnector.StatusElement.HAS_ERRORS;
+
 /**
  * This class creates a connection with a database and allows for convenient
  * queries and commands. <br>
@@ -1234,7 +1236,7 @@ public class DataBaseConnector {
     }
 
     /**
-     * Determines the first data table on the reference path <code>referencingTable -> table1 -> table2 -> ... -> lastTable -> null</code>
+     * Determines the first data table on the reference path <code>referencingTable -&gt; table1 -&gt; table2 -&gt; ... -&gt; lastTable -&gt; null</code>
      * referenced from <code>referencingTable</code>. This means that <code>referencingTable</code> is returned itself
      * if it is a data table.
      *
@@ -2719,7 +2721,7 @@ public class DataBaseConnector {
 
     /**
      * Returns an iterator over all rows in the table with matching id and a
-     * timestamp newer (>) than <code>timestamp</code>. The Iterator will use
+     * timestamp newer (&gt;) than <code>timestamp</code>. The Iterator will use
      * threads, memory and a connection until all matches are returned.
      *
      * @param ids       - List with primary keys
@@ -3216,7 +3218,7 @@ public class DataBaseConnector {
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             StringJoiner joiner = new StringJoiner(",");
             String sumFmtString = "sum(case when %s=TRUE then 1 end) as %s";
-            if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
+            if (statusElementsToReturn.contains(HAS_ERRORS))
                 joiner.add(String.format(sumFmtString, Constants.HAS_ERRORS, Constants.HAS_ERRORS));
             if (statusElementsToReturn.contains(StatusElement.IS_PROCESSED))
                 joiner.add(String.format(sumFmtString, Constants.IS_PROCESSED, Constants.IS_PROCESSED));
@@ -3230,7 +3232,7 @@ public class DataBaseConnector {
             {
                 ResultSet res = stmt.executeQuery(sql);
                 if (res.next()) {
-                    if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
+                    if (statusElementsToReturn.contains(HAS_ERRORS))
                         status.hasErrors = res.getLong(Constants.HAS_ERRORS);
                     if (statusElementsToReturn.contains(StatusElement.IN_PROCESS))
                         status.inProcess = res.getLong(Constants.IN_PROCESS);
