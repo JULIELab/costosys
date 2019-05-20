@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static de.julielab.costosys.dbconnection.DataBaseConnector.*;
 import static de.julielab.costosys.dbconnection.DataBaseConnector.StatusElement.*;
 
 /**
@@ -75,7 +76,6 @@ public class CLI {
         String msg;
         boolean updateMode = false;
 
-        boolean error = false;
         Mode mode = Mode.ERROR;
 
         Options options = getOptions();
@@ -92,8 +92,6 @@ public class CLI {
                 LOG.info("Verbose logging enabled.");
 
             // selecting the mode
-            if (cmd.hasOption("h"))
-                error = true; // To show help
             if (cmd.hasOption("i"))
                 mode = Mode.IMPORT;
             if (cmd.hasOption("u")) {
@@ -248,22 +246,21 @@ public class CLI {
                         qo.tableSchema = tableSchema;
                         qo.whereClause = whereClause;
                         qo.numberRefHops = numberRefHops;
-                        error = doQuery(dbc, qo);
+                        doQuery(dbc, qo);
                         break;
 
                     case IMPORT:
-                        error = doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
+                        doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
                         break;
 
                     case SUBSET:
-                        error = doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
+                        doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
                                 subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops);
                         break;
 
                     case RESET:
                         if (subsetTableName == null) {
                             LOG.error("You must provide the name of the subset table to reset.");
-                            error = true;
                         } else {
                             boolean files = cmd.hasOption("f");
                             try {
@@ -311,7 +308,7 @@ public class CLI {
                         }
                         break;
                     case STATUS:
-                        error = doStatus(dbc,
+                        doStatus(dbc,
                                 subsetTableName,
                                 cmd.hasOption("he"),
                                 cmd.hasOption("isp"),
@@ -449,14 +446,14 @@ public class CLI {
                 LOG.error("You must provide the name of a subset table to display its status.");
                 error = true;
             } else {
-                EnumSet<DataBaseConnector.StatusElement> modes = EnumSet.noneOf(DataBaseConnector.StatusElement.class);
-                if (showHasErrors) modes.add(DataBaseConnector.StatusElement.HAS_ERRORS);
-                if (showIsProcessed) modes.add(DataBaseConnector.StatusElement.IS_PROCESSED);
-                if (showIsInProcess) modes.add(DataBaseConnector.StatusElement.IN_PROCESS);
-                if (showTotal) modes.add(DataBaseConnector.StatusElement.TOTAL);
-                if (showLastComponent) modes.add(DataBaseConnector.StatusElement.LAST_COMPONENT);
+                EnumSet<StatusElement> modes = EnumSet.noneOf(StatusElement.class);
+                if (showHasErrors) modes.add(HAS_ERRORS);
+                if (showIsProcessed) modes.add(IS_PROCESSED);
+                if (showIsInProcess) modes.add(StatusElement.IN_PROCESS);
+                if (showTotal) modes.add(StatusElement.TOTAL);
+                if (showLastComponent) modes.add(StatusElement.LAST_COMPONENT);
                 if (modes.isEmpty())
-                    modes = EnumSet.allOf(DataBaseConnector.StatusElement.class);
+                    modes = EnumSet.allOf(StatusElement.class);
 
                 try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
                     SubsetStatus status = dbc.status(subsetTableName, modes);

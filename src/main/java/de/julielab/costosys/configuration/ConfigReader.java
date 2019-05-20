@@ -1,40 +1,16 @@
-/**
- * ConfigurationParser.java
- *
- * Copyright (c) 2011, JULIE Lab.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Common Public License v1.0
- *
- * Author: faessler/hellrich
- *
- * Current version: 1.0
- * Since version:   1.0
- *
- * Creation date: 22.03.2011
- **/
-
 package de.julielab.costosys.configuration;
+
+import com.ximpleware.*;
+import de.julielab.xml.JulieXMLTools;
+import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-
-import org.apache.commons.io.IOUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.ximpleware.AutoPilot;
-import com.ximpleware.NavException;
-import com.ximpleware.VTDException;
-import com.ximpleware.VTDGen;
-import com.ximpleware.VTDNav;
-import com.ximpleware.XMLModifier;
-import com.ximpleware.XPathEvalException;
-import com.ximpleware.XPathParseException;
-
-import de.julielab.xml.JulieXMLTools;
 
 /**
  * This class reads an xml configuration file, containing the definition of a
@@ -47,19 +23,18 @@ public class ConfigReader {
 
 	private static final Logger LOG = LoggerFactory
 			.getLogger(ConfigReader.class);
-	private final static int BUFFER_SIZE = 1000;
-	public static final String DEFAULT_DEFINITION = "/defaultConfiguration.xml";
+	private static final String DEFAULT_DEFINITION = "/defaultConfiguration.xml";
 
-	public static final String XPATH_ACTIVE_TABLE_SCHEMA = "//activeTableSchema";
-	public static final String XPATH_ACTIVE_DB = "//activeDBConnection";
-	public static final String XPATH_ACTIVE_PG_SCHEMA = "//activePostgresSchema";
-	public static final String XPATH_MAX_CONNS = "//maxActiveDBConnections";
+	static final String XPATH_ACTIVE_TABLE_SCHEMA = "//activeTableSchema";
+	private static final String XPATH_ACTIVE_DB = "//activeDBConnection";
+	private static final String XPATH_ACTIVE_PG_SCHEMA = "//activePostgresSchema";
+	private static final String XPATH_MAX_CONNS = "//maxActiveDBConnections";
 
-	public static final String XPATH_CONF_DBS = "//DBConnections";
-	public static final String XPATH_CONF_SCHEMAS = "//tableSchemas";
+	private static final String XPATH_CONF_DBS = "//DBConnections";
+	private static final String XPATH_CONF_SCHEMAS = "//tableSchemas";
 
-	public static final String XPATH_CONF_DB = "//DBConnection";
-	public static final String XPATH_CONF_SCHEMA = "//tableSchema";
+	private static final String XPATH_CONF_DB = "//DBConnection";
+	private static final String XPATH_CONF_SCHEMA = "//tableSchema";
 
 	private static final int INDEX_SCHEMA = 0;
 	private static final int INDEX_DB = 1;
@@ -82,7 +57,7 @@ public class ConfigReader {
 
 	public ConfigReader(InputStream def) {
 		try {
-			byte[] defaultConfData = null;
+			byte[] defaultConfData;
 			byte[] userConfData = null;
 
 			InputStream is = getClass().getResourceAsStream(DEFAULT_DEFINITION);
@@ -123,12 +98,12 @@ public class ConfigReader {
 	}
 
 	/**
-	 * @param mergedConfigData
-	 * @return
+	 * @param mergedConfigData The byte data of the merged defaultConfiguration.xml and user delivered configuration.
+	 * @return The names of all table schemas in the passed configuration data.
 	 */
 	private List<String> getAllSchemaNames(byte[] mergedConfigData)
 			throws VTDException {
-		List<String> schemaNames = new ArrayList<String>();
+		List<String> schemaNames = new ArrayList<>();
 
 		VTDGen vg = new VTDGen();
 		vg.setDoc(mergedConfigData);
@@ -158,10 +133,8 @@ public class ConfigReader {
 	 * @param userConfData
 	 *            - prepared user specific configuration file
 	 * @return - the merged configuration
-	 * @throws VTDException
-	 * @throws IOException
 	 */
-	protected static byte[] mergeConfigData(byte[] defaultConfData,
+	private static byte[] mergeConfigData(byte[] defaultConfData,
 			byte[] userConfData) throws VTDException, IOException {
 		VTDGen vg = new VTDGen();
 		vg.setDoc(defaultConfData);
@@ -284,8 +257,8 @@ public class ConfigReader {
 		try {
 			ap.selectXPath(xpath);
 			int index = ap.evalXPath();
-			String name = null;
-			Set<String> found = new HashSet<String>();
+			String name;
+			Set<String> found = new HashSet<>();
 			while (index != -1) {
 				int attrIndex = vn.getAttrVal(ATTRIBUTE_NAME);
 				if (attrIndex != -1) {
@@ -297,12 +270,8 @@ public class ConfigReader {
 				}
 				index = ap.evalXPath();
 			}
-		} catch (XPathParseException e) {
-			e.printStackTrace();
-		} catch (XPathEvalException e) {
-			e.printStackTrace();
-		} catch (NavException e) {
-			e.printStackTrace();
+		} catch (XPathParseException | XPathEvalException | NavException e) {
+			throw new IllegalStateException(e);
 		}
 		return doublet.equals("") ? null : doublet;
 	}
@@ -360,11 +329,9 @@ public class ConfigReader {
 	 * @param confData
 	 *            - prepared XML
 	 * @return - the retrieved element
-	 * @throws IOException
-	 * @throws VTDException
 	 */
-	protected static byte[][] extractConfigData(byte[] confData)
-			throws IOException, VTDException {
+	private static byte[][] extractConfigData(byte[] confData)
+			throws VTDException {
 		// Allocate space for schema and DB connection data.
 		byte[][] configData = new byte[2][];
 		VTDGen vg = new VTDGen();
