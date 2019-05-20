@@ -85,292 +85,290 @@ public class CLI {
         CommandLine cmd = null;
         try {
             cmd = parser.parse(options, args);
+
+
+            verbose = cmd.hasOption('v');
+            if (verbose)
+                LOG.info("Verbose logging enabled.");
+
+            // selecting the mode
+            if (cmd.hasOption("h"))
+                error = true; // To show help
+            if (cmd.hasOption("i"))
+                mode = Mode.IMPORT;
+            if (cmd.hasOption("u")) {
+                mode = Mode.IMPORT;
+                updateMode = true;
+            }
+            if (cmd.hasOption("q"))
+                mode = Mode.QUERY;
+            if (cmd.getOptionValue("s") != null)
+                mode = Mode.SUBSET;
+            if (cmd.getOptionValue("re") != null)
+                mode = Mode.RESET;
+            if (cmd.getOptionValue("st") != null)
+                mode = Mode.STATUS;
+            if (cmd.hasOption("t"))
+                mode = Mode.TABLES;
+            if (cmd.hasOption("lts"))
+                mode = Mode.LIST_TABLE_SCHEMAS;
+            if (cmd.hasOption("td"))
+                mode = Mode.TABLE_DEFINITION;
+            if (cmd.hasOption("sch"))
+                mode = Mode.SCHEME;
+            if (cmd.hasOption("ch"))
+                mode = Mode.CHECK;
+            if (cmd.hasOption("dc"))
+                mode = Mode.DEFAULT_CONFIG;
+            if (cmd.hasOption("dt"))
+                mode = Mode.DROP_TABLE;
+            if (cmd.hasOption("um"))
+                mode = Mode.UPDATE_MEDLINE;
+
+            // authentication
+            // configuration file
+            String dbcConfigPath = null;
+            if (cmd.hasOption("dbc"))
+                dbcConfigPath = cmd.getOptionValue("dbc");
+            if (dbcConfigPath == null)
+                dbcConfigPath = findConfigurationFile();
+            File conf = new File(dbcConfigPath);
+            dbUrl = cmd.getOptionValue('U');
+            if (dbUrl == null) {
+                msg = "No database URL given. Using value in configuration file";
+                logMessage(msg);
+            }
+            user = cmd.getOptionValue("n");
+            if (user == null) {
+                msg = "No database username given. Using value in configuration file";
+                logMessage(msg);
+            }
+            password = cmd.getOptionValue("p");
+            if (password == null) {
+                msg = "No password given. Using value in configuration file";
+                logMessage(msg);
+            }
+            serverName = cmd.getOptionValue("srv");
+            dbName = cmd.getOptionValue("db");
+            pgSchema = cmd.getOptionValue("pgs");
+            if (!((serverName != null && dbName != null) ^ dbUrl != null)
+                    && !(serverName == null && dbName == null && dbUrl == null) && !conf.exists()) {
+                final String errorMsg = "No base configuration has been found. Thus, you must specify server name and database name or the complete URL with -u (but not both).";
+                LOG.error(
+                        errorMsg);
+                throw new IllegalArgumentException(errorMsg);
+            }
+
+            DataBaseConnector dbc = null;
+            try {
+                if (conf.exists()) {
+                    logMessage(String.format("Using configuration file at %s", conf));
+                    if (dbUrl == null)
+                        dbc = new DataBaseConnector(serverName, dbName, user, password, pgSchema,
+                                new FileInputStream(conf));
+                    else
+                        dbc = new DataBaseConnector(dbUrl, user, password, pgSchema, new FileInputStream(conf));
+                } else {
+                    logMessage(String.format(
+                            "No custom configuration found (should be located at %s). Using default configuration.",
+                            Stream.of(USER_SCHEME_DEFINITION).collect(Collectors.joining(" or "))));
+                    if (dbUrl == null)
+                        dbc = new DataBaseConnector(serverName, dbName, user, password, pgSchema, null);
+                    else
+                        dbc = new DataBaseConnector(dbUrl, user, password, pgSchema, null);
+                }
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+            // all those options...
+            String tableName = cmd.getOptionValue("td");
+            if (tableName == null)
+                tableName = cmd.getOptionValue("ch");
+
+            String subsetTableName = cmd.getOptionValue("s");
+            if (subsetTableName == null)
+                subsetTableName = cmd.getOptionValue("re");
+            if (subsetTableName == null)
+                subsetTableName = cmd.getOptionValue("renp");
+            if (subsetTableName == null)
+                subsetTableName = cmd.getOptionValue("st");
+
+            String fileStr = cmd.getOptionValue("f");
+            if (fileStr == null)
+                fileStr = cmd.getOptionValue("i");
+            if (fileStr == null)
+                fileStr = cmd.getOptionValue("u");
+            if (cmd.hasOption("im")) {
+                mode = Mode.IMPORT;
+                // For some reasons, multuple versions of some documents have been found in the baseline in the past.
+                // Just use the update mode.
+                XMLConfiguration importConfig = loadXmlConfiguration(new File(cmd.getOptionValue("im")));
+                fileStr = importConfig.getString(ConfigurationConstants.INSERTION_INPUT);
+                updateMode = true;
+            }
+
+            String superTableName = cmd.getOptionValue("z");
+            if (superTableName == null)
+                superTableName = dbc.getActiveDataTable();
+
+            String queryStr = cmd.getOptionValue("q");
+            String subsetJournalFileName = cmd.getOptionValue("j");
+            String subsetQuery = cmd.getOptionValue("o");
+            String randomSubsetSize = cmd.getOptionValue("r");
+            String whereClause = cmd.getOptionValue("w");
+            String xpath = cmd.getOptionValue("x");
+            String baseOutDir = cmd.getOptionValue("out");
+            String batchSize = cmd.getOptionValue("bs");
+            String limit = cmd.getOptionValue("l");
+            String tableSchema = cmd.getOptionValue("ts") != null ? cmd.getOptionValue("ts") : dbc.getActiveTableSchema();
+            boolean useDelimiter = baseOutDir != null ? false : cmd.hasOption("d");
+            boolean returnPubmedArticleSet = cmd.hasOption("pas");
+            boolean mirrorSubset = cmd.hasOption("m");
+            boolean all4Subset = cmd.hasOption("a");
+            Integer numberRefHops = cmd.hasOption("rh") ? Integer.parseInt(cmd.getOptionValue("rh")) : null;
+
+            if (tableSchema.matches("[0-9]+")) {
+                tableSchema = dbc.getConfig().getTableSchemaNames().get(Integer.parseInt(tableSchema));
+            }
+
+            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+                switch (mode) {
+                    case QUERY:
+                        QueryOptions qo = new QueryOptions();
+                        qo.fileStr = fileStr;
+                        qo.queryStr = queryStr;
+                        qo.useDelimiter = useDelimiter;
+                        qo.pubmedArticleSet = returnPubmedArticleSet;
+                        qo.xpath = xpath;
+                        qo.baseOutDirStr = baseOutDir;
+                        qo.batchSizeStr = batchSize;
+                        qo.limitStr = limit;
+                        qo.tableName = superTableName;
+                        qo.tableSchema = tableSchema;
+                        qo.whereClause = whereClause;
+                        qo.numberRefHops = numberRefHops;
+                        error = doQuery(dbc, qo);
+                        break;
+
+                    case IMPORT:
+                        error = doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
+                        break;
+
+                    case SUBSET:
+                        error = doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
+                                subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops);
+                        break;
+
+                    case RESET:
+                        if (subsetTableName == null) {
+                            LOG.error("You must provide the name of the subset table to reset.");
+                            error = true;
+                        } else {
+                            boolean files = cmd.hasOption("f");
+                            try {
+                                boolean doReset = false;
+                                if (!files || StringUtils.isBlank(fileStr)) {
+                                    boolean np = cmd.hasOption("np");
+                                    boolean ne = cmd.hasOption("ne");
+                                    String lc = cmd.hasOption("lc") ? cmd.getOptionValue("lc") : null;
+                                    if (np)
+                                        logMessage("table reset is restricted to non-processed table rows");
+                                    if (ne)
+                                        logMessage("table reset is restricted to table row without errors");
+                                    if (lc != null)
+                                        logMessage("table reset is restricted to rows with last component " + lc);
+                                    if (!np && !ne && lc == null) {
+                                        SubsetStatus status = dbc.status(subsetTableName, EnumSet.of(IN_PROCESS, IS_PROCESSED, TOTAL));
+                                        long inProcess = status.inProcess;
+                                        long isProcessed = status.isProcessed;
+                                        long total = status.total;
+                                        // We don't bother with too small datasets, worst
+                                        // case would be to do it again for 10000 docs which
+                                        // is not much.
+                                        if (total > 10000 && inProcess + isProcessed >= total / 2) {
+                                            String input = getYesNoAnswer("The subset table \"" + subsetTableName
+                                                    + "\" is in process or already processed over 50%."
+                                                    + " Do you really wish to reset it completely into an unprocessed state? (yes/no)");
+                                            if ("yes".equals(input))
+                                                doReset = true;
+                                        }
+                                    }
+                                    if (doReset)
+                                        dbc.resetSubset(subsetTableName, np, ne, lc);
+                                } else {
+                                    logMessage("Resetting all documents identified by the IDs in file \"" + fileStr + "\".");
+                                    try {
+                                        List<Object[]> pkValues = asListOfArrays(fileStr);
+                                        dbc.resetSubset(subsetTableName, pkValues);
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                            } catch (TableNotFoundException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        break;
+                    case STATUS:
+                        error = doStatus(dbc,
+                                subsetTableName,
+                                cmd.hasOption("he"),
+                                cmd.hasOption("isp"),
+                                cmd.hasOption("inp"),
+                                cmd.hasOption("to"),
+                                cmd.hasOption("lc"));
+                        break;
+
+                    case TABLES:
+                        for (String s : dbc.getTables())
+                            System.out.println(s);
+                        break;
+
+                    case TABLE_DEFINITION:
+                        for (String s : dbc.getTableDefinition(tableName))
+                            System.out.println(s);
+                        break;
+
+                    case LIST_TABLE_SCHEMAS:
+                        System.out.println("The following table schema names are contained in the current configuration:\n");
+                        List<String> tableSchemaNames = dbc.getConfig().getTableSchemaNames();
+                        IntStream.range(0, tableSchemaNames.size()).mapToObj(i -> i + " " + tableSchemaNames.get(i))
+                                .forEach(System.out::println);
+                        break;
+
+                    case SCHEME:
+                        System.out.println(dbc.getScheme());
+                        break;
+
+                    case CHECK:
+                        dbc.checkTableDefinition(tableName);
+                        break;
+
+                    case DEFAULT_CONFIG:
+                        System.out.println(new String(dbc.getEffectiveConfiguration()));
+                        break;
+
+                    case DROP_TABLE:
+                        dropTableInteractively(dbc, cmd.getOptionValue("dt"));
+                        break;
+
+                    case UPDATE_MEDLINE:
+                        Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("um"))));
+                        updater.process(dbc);
+                        break;
+
+                    case ERROR:
+                        break;
+                }
+            }
+
+            time = System.currentTimeMillis() - time;
+            LOG.info(String.format("Processing took %d seconds.", time / 1000));
         } catch (ParseException e) {
             LOG.error("Can't parse arguments: " + e.getMessage());
             printHelp(options);
-            System.exit(1);
         }
-
-        verbose = cmd.hasOption('v');
-        if (verbose)
-            LOG.info("Verbose logging enabled.");
-
-        // selecting the mode
-        if (cmd.hasOption("h"))
-            error = true; // To show help
-        if (cmd.hasOption("i"))
-            mode = Mode.IMPORT;
-        if (cmd.hasOption("u")) {
-            mode = Mode.IMPORT;
-            updateMode = true;
-        }
-        if (cmd.hasOption("q"))
-            mode = Mode.QUERY;
-        if (cmd.getOptionValue("s") != null)
-            mode = Mode.SUBSET;
-        if (cmd.getOptionValue("re") != null)
-            mode = Mode.RESET;
-        if (cmd.getOptionValue("st") != null)
-            mode = Mode.STATUS;
-        if (cmd.hasOption("t"))
-            mode = Mode.TABLES;
-        if (cmd.hasOption("lts"))
-            mode = Mode.LIST_TABLE_SCHEMAS;
-        if (cmd.hasOption("td"))
-            mode = Mode.TABLE_DEFINITION;
-        if (cmd.hasOption("sch"))
-            mode = Mode.SCHEME;
-        if (cmd.hasOption("ch"))
-            mode = Mode.CHECK;
-        if (cmd.hasOption("dc"))
-            mode = Mode.DEFAULT_CONFIG;
-        if (cmd.hasOption("dt"))
-            mode = Mode.DROP_TABLE;
-        if (cmd.hasOption("um"))
-            mode = Mode.UPDATE_MEDLINE;
-
-        // authentication
-        // configuration file
-        String dbcConfigPath = null;
-        if (cmd.hasOption("dbc"))
-            dbcConfigPath = cmd.getOptionValue("dbc");
-        if (dbcConfigPath == null)
-            dbcConfigPath = findConfigurationFile();
-        File conf = new File(dbcConfigPath);
-        dbUrl = cmd.getOptionValue('U');
-        if (dbUrl == null) {
-            msg = "No database URL given. Using value in configuration file";
-            logMessage(msg);
-        }
-        user = cmd.getOptionValue("n");
-        if (user == null) {
-            msg = "No database username given. Using value in configuration file";
-            logMessage(msg);
-        }
-        password = cmd.getOptionValue("p");
-        if (password == null) {
-            msg = "No password given. Using value in configuration file";
-            logMessage(msg);
-        }
-        serverName = cmd.getOptionValue("srv");
-        dbName = cmd.getOptionValue("db");
-        pgSchema = cmd.getOptionValue("pgs");
-        if (!((serverName != null && dbName != null) ^ dbUrl != null)
-                && !(serverName == null && dbName == null && dbUrl == null) && !conf.exists()) {
-            LOG.error(
-                    "No base configuration has been found. Thus, you must specify server name and database name or the complete URL with -u (but not both).");
-            System.exit(1);
-        }
-
-        DataBaseConnector dbc = null;
-        try {
-            if (conf.exists()) {
-                logMessage(String.format("Using configuration file at %s", conf));
-                if (dbUrl == null)
-                    dbc = new DataBaseConnector(serverName, dbName, user, password, pgSchema,
-                            new FileInputStream(conf));
-                else
-                    dbc = new DataBaseConnector(dbUrl, user, password, pgSchema, new FileInputStream(conf));
-            } else {
-                logMessage(String.format(
-                        "No custom configuration found (should be located at %s). Using default configuration.",
-                        Stream.of(USER_SCHEME_DEFINITION).collect(Collectors.joining(" or "))));
-                if (dbUrl == null)
-                    dbc = new DataBaseConnector(serverName, dbName, user, password, pgSchema, null);
-                else
-                    dbc = new DataBaseConnector(dbUrl, user, password, pgSchema, null);
-            }
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        // all those options...
-        String tableName = cmd.getOptionValue("td");
-        if (tableName == null)
-            tableName = cmd.getOptionValue("ch");
-
-        String subsetTableName = cmd.getOptionValue("s");
-        if (subsetTableName == null)
-            subsetTableName = cmd.getOptionValue("re");
-        if (subsetTableName == null)
-            subsetTableName = cmd.getOptionValue("renp");
-        if (subsetTableName == null)
-            subsetTableName = cmd.getOptionValue("st");
-
-        String fileStr = cmd.getOptionValue("f");
-        if (fileStr == null)
-            fileStr = cmd.getOptionValue("i");
-        if (fileStr == null)
-            fileStr = cmd.getOptionValue("u");
-        if (cmd.hasOption("im")) {
-            mode = Mode.IMPORT;
-            // For some reasons, multuple versions of some documents have been found in the baseline in the past.
-            // Just use the update mode.
-            XMLConfiguration importConfig = loadXmlConfiguration(new File(cmd.getOptionValue("im")));
-            fileStr = importConfig.getString(ConfigurationConstants.INSERTION_INPUT);
-            updateMode = true;
-        }
-
-        String superTableName = cmd.getOptionValue("z");
-        if (superTableName == null)
-            superTableName = dbc.getActiveDataTable();
-
-        String queryStr = cmd.getOptionValue("q");
-        String subsetJournalFileName = cmd.getOptionValue("j");
-        String subsetQuery = cmd.getOptionValue("o");
-        String randomSubsetSize = cmd.getOptionValue("r");
-        String whereClause = cmd.getOptionValue("w");
-        String xpath = cmd.getOptionValue("x");
-        String baseOutDir = cmd.getOptionValue("out");
-        String batchSize = cmd.getOptionValue("bs");
-        String limit = cmd.getOptionValue("l");
-        String tableSchema = cmd.getOptionValue("ts") != null ? cmd.getOptionValue("ts") : dbc.getActiveTableSchema();
-        boolean useDelimiter = baseOutDir != null ? false : cmd.hasOption("d");
-        boolean returnPubmedArticleSet = cmd.hasOption("pas");
-        boolean mirrorSubset = cmd.hasOption("m");
-        boolean all4Subset = cmd.hasOption("a");
-        Integer numberRefHops = cmd.hasOption("rh") ? Integer.parseInt(cmd.getOptionValue("rh")) : null;
-
-        if (tableSchema.matches("[0-9]+")) {
-            tableSchema = dbc.getConfig().getTableSchemaNames().get(Integer.parseInt(tableSchema));
-        }
-
-        try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
-            switch (mode) {
-                case QUERY:
-                    QueryOptions qo = new QueryOptions();
-                    qo.fileStr = fileStr;
-                    qo.queryStr = queryStr;
-                    qo.useDelimiter = useDelimiter;
-                    qo.pubmedArticleSet = returnPubmedArticleSet;
-                    qo.xpath = xpath;
-                    qo.baseOutDirStr = baseOutDir;
-                    qo.batchSizeStr = batchSize;
-                    qo.limitStr = limit;
-                    qo.tableName = superTableName;
-                    qo.tableSchema = tableSchema;
-                    qo.whereClause = whereClause;
-                    qo.numberRefHops = numberRefHops;
-                    error = doQuery(dbc, qo);
-                    break;
-
-                case IMPORT:
-                    error = doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
-                    break;
-
-                case SUBSET:
-                    error = doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
-                            subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops);
-                    break;
-
-                case RESET:
-                    if (subsetTableName == null) {
-                        LOG.error("You must provide the name of the subset table to reset.");
-                        error = true;
-                    } else {
-                        boolean files = cmd.hasOption("f");
-                        try {
-                            if (!files || StringUtils.isBlank(fileStr)) {
-                                boolean np = cmd.hasOption("np");
-                                boolean ne = cmd.hasOption("ne");
-                                String lc = cmd.hasOption("lc") ? cmd.getOptionValue("lc") : null;
-                                if (np)
-                                    logMessage("table reset is restricted to non-processed table rows");
-                                if (ne)
-                                    logMessage("table reset is restricted to table row without errors");
-                                if (lc != null)
-                                    logMessage("table reset is restricted to rows with last component " + lc);
-                                if (!np && !ne && lc == null) {
-                                    SubsetStatus status = dbc.status(subsetTableName, EnumSet.of(IN_PROCESS, IS_PROCESSED, TOTAL));
-                                    long inProcess = status.inProcess;
-                                    long isProcessed = status.isProcessed;
-                                    long total = status.total;
-                                    // We don't bother with too small datasets, worst
-                                    // case would be to do it again for 10000 docs which
-                                    // is not much.
-                                    if (total > 10000 && inProcess + isProcessed >= total / 2) {
-                                        String input = getYesNoAnswer("The subset table \"" + subsetTableName
-                                                + "\" is in process or already processed over 50%."
-                                                + " Do you really wish to reset it completely into an unprocessed state? (yes/no)");
-                                        if (input.equals("no"))
-                                            System.exit(0);
-                                    }
-                                }
-                                dbc.resetSubset(subsetTableName, np, ne, lc);
-                            } else {
-                                logMessage("Resetting all documents identified by the IDs in file \"" + fileStr + "\".");
-                                try {
-                                    List<Object[]> pkValues = asListOfArrays(fileStr);
-                                    dbc.resetSubset(subsetTableName, pkValues);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        } catch (TableNotFoundException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    break;
-                case STATUS:
-                    error = doStatus(dbc,
-                            subsetTableName,
-                            cmd.hasOption("he"),
-                            cmd.hasOption("isp"),
-                            cmd.hasOption("inp"),
-                            cmd.hasOption("to"),
-                            cmd.hasOption("lc"));
-                    break;
-
-                case TABLES:
-                    for (String s : dbc.getTables())
-                        System.out.println(s);
-                    break;
-
-                case TABLE_DEFINITION:
-                    for (String s : dbc.getTableDefinition(tableName))
-                        System.out.println(s);
-                    break;
-
-                case LIST_TABLE_SCHEMAS:
-                    System.out.println("The following table schema names are contained in the current configuration:\n");
-                    List<String> tableSchemaNames = dbc.getConfig().getTableSchemaNames();
-                    IntStream.range(0, tableSchemaNames.size()).mapToObj(i -> i + " " + tableSchemaNames.get(i))
-                            .forEach(System.out::println);
-                    break;
-
-                case SCHEME:
-                    System.out.println(dbc.getScheme());
-                    break;
-
-                case CHECK:
-                    dbc.checkTableDefinition(tableName);
-                    break;
-
-                case DEFAULT_CONFIG:
-                    System.out.println(new String(dbc.getEffectiveConfiguration()));
-                    break;
-
-                case DROP_TABLE:
-                    dropTableInteractively(dbc, cmd.getOptionValue("dt"));
-                    break;
-
-                case UPDATE_MEDLINE:
-                    Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("um"))));
-                    updater.process(dbc);
-                    break;
-
-                case ERROR:
-                    break;
-            }
-        }
-
-        if (error) {
-            // printHelp(options);
-            System.exit(1);
-        }
-
-        time = System.currentTimeMillis() - time;
-        LOG.info(String.format("Processing took %d seconds.", time / 1000));
     }
 
     public static String findConfigurationFile() throws ConfigurationNotFoundException {
@@ -405,8 +403,8 @@ public class CLI {
                         + dbc.getDbURL() + ". Do you really want to drop it (y/n)?");
                 BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
                 String response = in.readLine().toLowerCase();
-                while (!response.equals("y") && !response.equals("yes") && !response.equals("n")
-                        && !response.equals("no")) {
+                while (!"y".equals(response) && !"yes".equals(response) && !"n".equals(response)
+                        && !"no".equals("no")) {
                     System.out.println("Please specify y(es) or n(o).");
                     response = in.readLine().toLowerCase();
                 }
@@ -440,7 +438,6 @@ public class CLI {
             }
         } catch (IOException e) {
             LOG.error("Something went wrong while reading from STDIN: ", e);
-            System.exit(1);
         }
         return input;
     }
@@ -1044,10 +1041,6 @@ public class CLI {
         return list;
     }
 
-    private enum Mode {
-        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, UPDATE_MEDLINE
-    }
-
     public static XMLConfiguration loadXmlConfiguration(File configurationFile) throws ConfigurationException {
         try {
             Parameters params = new Parameters();
@@ -1059,5 +1052,9 @@ public class CLI {
         } catch (org.apache.commons.configuration2.ex.ConfigurationException e) {
             throw new ConfigurationException(e);
         }
+    }
+
+    private enum Mode {
+        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, UPDATE_MEDLINE
     }
 }
