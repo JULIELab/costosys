@@ -1,3 +1,4 @@
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/6c06345e4f6b4a18a0e38043f11c6e60)](https://app.codacy.com/app/khituras/costosys?utm_source=github.com&utm_medium=referral&utm_content=JULIELab/costosys&utm_campaign=Badge_Grade_Dashboard)
 [![Build Status](https://travis-ci.com/JULIELab/costosys.svg?branch=master)](https://travis-ci.com/JULIELab/costosys)
 
 # CoStoSys
