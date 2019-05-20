@@ -38,38 +38,12 @@
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
 				<field name="xmi" type="bytea" retrieve="true" gzip="true"/>
 			</tableSchema>
-			<tableSchema name="xmi_text" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="xmi" type="xml" retrieve="true"/>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
-			</tableSchema>
-			<tableSchema name="xmi_annotation" forEach=".">
-				<field name="docid" type="xml" primaryKey="true" retrieve="false"/>
-				<field name="xmi" type="xml" retrieve="true"/>
-			</tableSchema>
-			<tableSchema name="xmi_text_gzip" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="xmi" type="bytea" 	retrieve="true" gzip="true"/>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
-			</tableSchema>
 			<!-- This schema is supposed to only get the max_xmi_id field value of
 				the xmi_text_gzip schema. -->
 			<tableSchema name="max_id_addition" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="false"/>
 				<field name="xmi" type="bytea" retrieve="false" gzip="true"/>
 				<field name="max_xmi_id" type="integer" retrieve="true"/>
-			</tableSchema>
-			<tableSchema name="xmi_annotation_gzip" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="false"/>
-				<field name="xmi" type="bytea" retrieve="true" gzip="true"/>
-			</tableSchema>
-			<tableSchema name="dbc_junit_gzip" forEach="/MedlineCitationSet/MedlineCitation">
-				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"/>
-				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"/>
 			</tableSchema>
 		</tableSchemas>
 	</DBSchemaInformation>

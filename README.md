@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.com/JULIELab/costosys.svg?branch=master)](https://travis-ci.com/JULIELab/costosys)
+[![Build Status](https://travis-ci.com/JULIELab/costosys.svg?branch=master)](https://travis-ci.com/JULIELab/costosys) 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/6c06345e4f6b4a18a0e38043f11c6e60)](https://app.codacy.com/app/khituras/costosys?utm_source=github.com&utm_medium=referral&utm_content=JULIELab/costosys&utm_campaign=Badge_Grade_Dashboard)[![Automated Release Notes by gren](https://img.shields.io/badge/%F0%9F%A4%96-release%20notes-00B2EE.svg)](https://github-tools.github.io/github-release-notes/)
 
 # CoStoSys
 The Corpus Storage System (CoStoSys) is a tool and abstraction layer for a PostgreSQL document database.
@@ -46,11 +47,6 @@ have been predefined, including
 | medline_2017        | Defines the columns 'pmid' and 'xml'. Import data is expected to be in PubMed XML PubmedArticleSet format where one large XML file contains a bulk of PubMed articles. The individual articles must be located at XPath /PubmedArticleSet/PubmedArticle/MedlineCitation. This format is employed by the downloadable PubMed distribution since 2017. XML data are stored in GZIP format.|
 | medline_2016        | Defines the columns 'pmid' and 'xml'. Import data is expected to be in MEDLINE XML MedlineCitationSet format where one large XML file contains a bulk of MEDLINE articles. The individual articles must be located at XPath /MedlineCitationSet/MedlineCitation. This format was employed by the downloadable MEDLINE distribution until 2016. XML data are stored in GZIP format.        |
 | pubmed_gzip         | The same as medline_2017.           |
-| xmi_text            | Used internally. Defines the columns 'pmid', 'xmi', 'max_xmi_id' and 'sofa_mapping'. Used by the JeDIS components [jcore-xmi-db-reader](https://github.com/JULIELab/jcore-base/tree/b2128199bd548dd989b0d7c198634ed79670e8c7/jcore-xmi-db-reader) and [jcore-xmi-db-writer](https://github.com/JULIELab/jcore-base/tree/b2128199bd548dd989b0d7c198634ed79670e8c7/jcore-xmi-db-writer) to read and store UIMA annotation graphs in XMI format that were segmented into annotation types with separate storage.|
-| xmi_annotation      | Used internally. Defines the columns 'pmid' and 'xmi'. This table schema is used for the annotation data segmented away from full XMI annotation graphs, see xmi_text.          |
-| xmi_text_gzip       | Used internally. The same as xmi_text but the contents of the xmi column are stored an GZIP format.|
-| max_id_addition     | Used internally. Defines the fields 'pmid', 'xmi' and 'max_xmi_id' but only marks the 'max_xmi_id' column for retrieval. This schema is not supposed to be used for data import but for a table with xmi_text schema for which only the current maximum XMI ID should be retrieved. Technical detail of the JeDIS architecture.|
-| xmi_annotation_gzip | Used internally. The same as xmi_annotation but with the XMI data in GZIP format.|
 
 Custom table schema may be added to the configuration at XPath `/databaseConnectorConfiguration/DBSchemaInformation/tableSchemas`. Refer to docbook documentation and the XML schema for details.
 
