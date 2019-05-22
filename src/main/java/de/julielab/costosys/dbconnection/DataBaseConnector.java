@@ -33,7 +33,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static de.julielab.costosys.dbconnection.DataBaseConnector.StatusElement.HAS_ERRORS;
 
 /**
  * This class creates a connection with a database and allows for convenient
@@ -93,7 +92,7 @@ public class DataBaseConnector {
             // that have reserved connections and did never release them. Those threads would be held in memory
             // when we used strong references which would be a memory leak.
             .weakKeys()
-            .build(new CacheLoader<Thread, List<CoStoSysConnection>>() {
+            .build(new CacheLoader<>() {
                 @Override
                 public List<CoStoSysConnection> load(Thread thread) {
                     return new ArrayList<>();
@@ -129,7 +128,6 @@ public class DataBaseConnector {
     private String user;
     private String password;
     private ConfigReader config;
-
     /**************************************************************************
      *************************** Constructors ********************************
      **************************************************************************/
@@ -164,8 +162,8 @@ public class DataBaseConnector {
             LOG.warn(
                     "No active database configured in configuration file or configuration file is empty or does not exist.");
         }
-        LOG.info("Active Postgres schema: {}", dbConfig.getActivePGSchema() );
-        LOG.info("Active data Postgres schema: {}", dbConfig.getActiveDataPGSchema() );
+        LOG.info("Active Postgres schema: {}", dbConfig.getActivePGSchema());
+        LOG.info("Active data Postgres schema: {}", dbConfig.getActiveDataPGSchema());
     }
 
     /**
@@ -420,7 +418,6 @@ public class DataBaseConnector {
         return conn;
     }
 
-
     /**
      * @return the activeDataTable
      */
@@ -553,7 +550,7 @@ public class DataBaseConnector {
         Connection conn = null;
         boolean idsRetrieved = false;
         while (!idsRetrieved) {
-            try (CoStoSysConnection costoConn = obtainOrReserveConnection()){
+            try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
                 FieldConfig fieldConfig = fieldConfigs.get(schemaName);
                 conn = costoConn.getConnection();
 
@@ -747,10 +744,11 @@ public class DataBaseConnector {
      *
      * @param table name of the subset table
      * @param ids   primary key arrays defining the entries to delete
+     * @return The number of successfully modified table rows.
      */
-    public void markAsProcessed(String table, List<Object[]> ids) {
+    public int markAsProcessed(String table, List<Object[]> ids) {
         String sql = "UPDATE " + table + " SET " + Constants.PROCESSED + " = TRUE WHERE ";
-        modifyTable(sql, ids);
+        return modifyTable(sql, ids);
     }
 
     /**
@@ -765,25 +763,28 @@ public class DataBaseConnector {
      *
      * @param sql a valid SQL command, ending with "WHERE "
      * @param ids list of primary key arrays
+     * @return The number of successfully modified table rows.
      * @see #modifyTable(String, List)
      */
-    public void modifyTable(String sql, List<Object[]> ids) {
-        modifyTable(sql, ids, activeTableSchema);
+    public int modifyTable(String sql, List<Object[]> ids) {
+        return modifyTable(sql, ids, activeTableSchema);
     }
 
     /**
      * <p>
-     * Executes a given SQL command (must end with "WHERE "!) an extends the
+     * Executes a given SQL command (must end with "WHERE "!) and extends the
      * WHERE-clause with the primary keys, set to the values in ids.
      * </p>
      *
      * @param sql        a valid SQL command, ending with "WHERE "
      * @param ids        list of primary key arrays
      * @param schemaName name of the schema which defines the primary keys
+     * @return The number of successfully modified table rows.
      */
-    public void modifyTable(String sql, List<Object[]> ids, String schemaName) {
+    public int modifyTable(String sql, List<Object[]> ids, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
+        int successfulRows = 0;
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             String where = StringUtils.join(fieldConfig.expandPKNames("%s = ?"), " AND ");
             String fullSQL = sql + where;
@@ -796,27 +797,23 @@ public class DataBaseConnector {
                 e.printStackTrace();
             }
             String[] pks = fieldConfig.getPrimaryKey();
-            for (Object[] id : ids) {
-                for (int i = 0; i < id.length; ++i) {
-                    try {
-                        setPreparedStatementParameterWithType(i + 1, ps, id[i], pks[i], fieldConfig);
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
-                }
-                try {
-                    ps.addBatch();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
             try {
-                ps.executeBatch();
+                for (int i = 0; i < ids.size(); i++) {
+                    Object[] id = ids.get(i);
+                    for (int j = 0; j < id.length; ++j) {
+                        setPreparedStatementParameterWithType(j + 1, ps, id[j], pks[j], fieldConfig);
+                    }
+                    ps.addBatch();
+                    if (i % DEFAULT_QUERY_BATCH_SIZE == 0)
+                        successfulRows += IntStream.of(ps.executeBatch()).sum();
+                }
+                successfulRows += IntStream.of(ps.executeBatch()).sum();
                 conn.commit();
             } catch (SQLException e) {
-                e.printStackTrace();
+                throw new CoStoSysSQLRuntimeException(e);
             }
         }
+        return successfulRows;
     }
 
     /**
@@ -1407,10 +1404,6 @@ public class DataBaseConnector {
         return false;
     }
 
-    /**************************************************************************
-     ********************************* Data Import *****************************
-     **************************************************************************/
-
     /**
      * <p>
      * Convenience method for creating and initializing a subset in one step. See
@@ -1429,6 +1422,10 @@ public class DataBaseConnector {
         createSubsetTable(subsetTable, supersetTable, comment);
         initRandomSubset(size, subsetTable, supersetTable);
     }
+
+    /**************************************************************************
+     ********************************* Data Import *****************************
+     **************************************************************************/
 
     /**
      * <p>
@@ -1652,11 +1649,6 @@ public class DataBaseConnector {
         }
     }
 
-    // TODO: could be merged with defineSubsetWithWhereClause ?
-    // EF: But here the ID list is broken down into smaller lists for which the
-    // where clause is built. defineSubsetWithWhereClause isn't capable of such
-    // things. So my vote is to let it the current way (09.01.2012).
-
     /**
      * Defines a subset by populating a subset table with primary keys from another
      * table. A WHERE clause is used to control which entries are copied, checking
@@ -1670,6 +1662,11 @@ public class DataBaseConnector {
     public void initSubset(List<String> values, String subsetTable, String supersetTable, String columnToTest) {
         initSubset(values, subsetTable, supersetTable, columnToTest, activeTableSchema);
     }
+
+    // TODO: could be merged with defineSubsetWithWhereClause ?
+    // EF: But here the ID list is broken down into smaller lists for which the
+    // where clause is built. defineSubsetWithWhereClause isn't capable of such
+    // things. So my vote is to let it the current way (09.01.2012).
 
     /**
      * Defines a subset by populating a subset table with primary keys from another
@@ -2024,7 +2021,7 @@ public class DataBaseConnector {
         // The original where was: 'where (is_processed = TRUE OR
         // is_in_process = TRUE) AND %s'
         String updateFormatString = "UPDATE " + subsetTableName + " SET " + Constants.IS_PROCESSED + "=FALSE, "
-                + Constants.IN_PROCESS + "= FALSE, " + Constants.LAST_COMPONENT + "='" + DEFAULT_PIPELINE_STATE +"," + Constants.HOST_NAME + "=NULL"
+                + Constants.IN_PROCESS + "= FALSE, " + Constants.LAST_COMPONENT + "='" + DEFAULT_PIPELINE_STATE + "," + Constants.HOST_NAME + "=NULL"
                 + "' WHERE %s";
         return performBatchUpdate(conn, pkValues, updateFormatString, schemaName);
     }
@@ -2316,21 +2313,6 @@ public class DataBaseConnector {
      * </p>
      * <p>
      * The input rows are expected to fit the table schema <code>schemaName</code>.
-     * </p>
-     *
-     * @param it
-     *            - an Iterator, yielding new or updated entries.
-     * @param tableName
-     *            - the updated table
-     */
-
-    /**
-     * <p>
-     * Updates a table with the entries yielded by the iterator. If the entries is
-     * not yet in the table, it will be inserted instead.
-     * </p>
-     * <p>
-     * The input rows are expected to fit the table schema <code>schemaName</code>.
      *
      * @param it         - an Iterator, yielding new or updated entries.
      * @param tableName  - the updated table
@@ -2445,6 +2427,21 @@ public class DataBaseConnector {
             }
         }
     }
+
+    /**
+     * <p>
+     * Updates a table with the entries yielded by the iterator. If the entries is
+     * not yet in the table, it will be inserted instead.
+     * </p>
+     * <p>
+     * The input rows are expected to fit the table schema <code>schemaName</code>.
+     * </p>
+     *
+     * @param it
+     *            - an Iterator, yielding new or updated entries.
+     * @param tableName
+     *            - the updated table
+     */
 
     /**
      * Performs the actual update in the database. Additionally manages the
@@ -2638,7 +2635,6 @@ public class DataBaseConnector {
         return String.format(stmtTemplate, tableName, columnsStrBuilder.toString(), valuesStrBuilder.toString());
     }
 
-
     /**
      * Constructs an SQL prepared statement for updating data rows in the database
      * table <code>tableName</code> according to the field schema definition.
@@ -2709,16 +2705,6 @@ public class DataBaseConnector {
         return queryWithTime(ids, table, timestamp, activeTableSchema);
     }
 
-    /********************************
-     * Data Retrieval
-     ****************************************************************************************************/
-    /*
-     * Speed: (tested by repeated queries, using a pool-pc and 1000 as batchSize)
-     * queryAll() fetched 8.5 documents/ms (33min for whole db with 16.9*10e6
-     * documents) query(ids) fetched 9.3 documents/ms (9.3sec for 10e5 documents of
-     * a PMID sample)
-     */
-
     /**
      * Returns an iterator over all rows in the table with matching id and a
      * timestamp newer (&gt;) than <code>timestamp</code>. The Iterator will use
@@ -2734,6 +2720,16 @@ public class DataBaseConnector {
         String timestampWhere = fieldConfig.getTimestampFieldName() + " > " + timestamp;
         return new ThreadedColumnsToRetrieveIterator(this, ids, table, timestampWhere, schemaName);
     }
+
+    /********************************
+     * Data Retrieval
+     ****************************************************************************************************/
+    /*
+     * Speed: (tested by repeated queries, using a pool-pc and 1000 as batchSize)
+     * queryAll() fetched 8.5 documents/ms (33min for whole db with 16.9*10e6
+     * documents) query(ids) fetched 9.3 documents/ms (9.3sec for 10e5 documents of
+     * a PMID sample)
+     */
 
     /**
      * Returns an iterator over the column <code>field</code> in the table
@@ -2893,7 +2889,7 @@ public class DataBaseConnector {
         final FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         // Build the correct query.
-        String query = null;
+        String query;
         String selectedColumns = StringUtils.join(fieldConfig.getColumnsToRetrieve(), ",");
         // prepend there WHERE keyword if not already present and if we don't
         // actually have only a LIMIT constraint
@@ -3218,7 +3214,7 @@ public class DataBaseConnector {
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             StringJoiner joiner = new StringJoiner(",");
             String sumFmtString = "sum(case when %s=TRUE then 1 end) as %s";
-            if (statusElementsToReturn.contains(HAS_ERRORS))
+            if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
                 joiner.add(String.format(sumFmtString, Constants.HAS_ERRORS, Constants.HAS_ERRORS));
             if (statusElementsToReturn.contains(StatusElement.IS_PROCESSED))
                 joiner.add(String.format(sumFmtString, Constants.IS_PROCESSED, Constants.IS_PROCESSED));
@@ -3232,7 +3228,7 @@ public class DataBaseConnector {
             {
                 ResultSet res = stmt.executeQuery(sql);
                 if (res.next()) {
-                    if (statusElementsToReturn.contains(HAS_ERRORS))
+                    if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
                         status.hasErrors = res.getLong(Constants.HAS_ERRORS);
                     if (statusElementsToReturn.contains(StatusElement.IN_PROCESS))
                         status.inProcess = res.getLong(Constants.IN_PROCESS);
@@ -3314,7 +3310,7 @@ public class DataBaseConnector {
      */
     public String getScheme() {
         String scheme = "none";
-        try (CoStoSysConnection conn = obtainOrReserveConnection()){
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             ResultSet res = conn.createStatement().executeQuery("SHOW search_path;");
             if (res.next())
                 scheme = res.getString(1);
@@ -3324,16 +3320,16 @@ public class DataBaseConnector {
         return scheme;
     }
 
-    /*******************************
-     * Classes for query()
-     *******************************************/
-
     /**
      * @return the active field configuration
      */
     public FieldConfig getFieldConfiguration() {
         return fieldConfigs.get(activeTableSchema);
     }
+
+    /*******************************
+     * Classes for query()
+     *******************************************/
 
     public void addFieldConfiguration(FieldConfig config) {
         fieldConfigs.put(config.getName(), config);
@@ -3913,7 +3909,6 @@ public class DataBaseConnector {
         conn.getConnection().close();
     }
 
-
     public Object withConnectionQuery(DbcQuery<?> command) {
         Object ret = null;
         try (CoStoSysConnection ignored = obtainOrReserveConnection()) {
@@ -3951,6 +3946,64 @@ public class DataBaseConnector {
                 LOG.error("Could not execute SQL", throwable);
             }
         }
+    }
+
+    /**
+     * Creates a query cursor to the given subset table and retrieves all those primary keys according to the active table schema that are marked as <tt>processed</tt>.
+     *
+     * @param subsetTable The subset table to retrieve the processed primary key values from.
+     * @return The primary keys that are marked as <tt>processed</tt> in <tt>subsetTable</tt>.
+     * @throws CoStoSysException If the given table is not a subset table.
+     */
+    public List<Object[]> getProcessedPrimaryKeys(String subsetTable) throws CoStoSysException {
+        return getProcessedPrimaryKeys(subsetTable, getActiveTableSchema());
+    }
+
+    /**
+     * Creates a query cursor to the given subset table and retrieves all those primary keys according to <tt>tableSchema</tt> that are marked as <tt>processed</tt>.
+     *
+     * @param subsetTable The subset table to retrieve the processed primary key values from.
+     * @param tableSchema The schema of the data table referenced by the subset. Only the primary key columns are important.
+     * @return The primary keys that are marked as <tt>processed</tt> in <tt>subsetTable</tt>.
+     * @throws CoStoSysException If the given table is not a subset table.
+     */
+    public List<Object[]> getProcessedPrimaryKeys(String subsetTable, String tableSchema) throws CoStoSysException {
+        Connection sqlConn = null;
+        boolean wasAutoCommit = true;
+        List<Object[]> ids = new ArrayList<>();
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+            if (!isSubsetTable(subsetTable))
+                throw new CoStoSysException("The table " + subsetTable + " is not a subset table.");
+
+            final FieldConfig fieldConfiguration = getFieldConfiguration(tableSchema);
+
+            sqlConn = conn.getConnection();
+            wasAutoCommit = conn.getAutoCommit();
+            final Statement stmt = conn.createStatement();
+            stmt.setFetchSize(DEFAULT_QUERY_BATCH_SIZE);
+            String sql = String.format("SELECT %s FROM %s WHERE %s = TRUE", fieldConfiguration.getPrimaryKeyString(), subsetTable, Constants.IS_PROCESSED);
+            String[] pks = fieldConfiguration.getPrimaryKey();
+            try (final ResultSet res = stmt.executeQuery(sql)) {
+                while (res.next()) {
+                    Object[] values = new String[pks.length];
+                    for (int i = 0; i < pks.length; i++) {
+                        values[i] = res.getObject(i + 1);
+                    }
+                    ids.add(values);
+                }
+            }
+        } catch (SQLException e) {
+            throw new CoStoSysSQLRuntimeException(e);
+        } finally {
+            if (sqlConn != null) {
+                try {
+                    sqlConn.setAutoCommit(wasAutoCommit);
+                } catch (SQLException e) {
+                    throw new CoStoSysSQLRuntimeException(e);
+                }
+            }
+        }
+        return ids;
     }
 
     public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}

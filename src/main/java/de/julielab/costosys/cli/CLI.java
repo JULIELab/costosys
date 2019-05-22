@@ -17,6 +17,8 @@ package de.julielab.costosys.cli;
 
 import de.julielab.costosys.Constants;
 import de.julielab.costosys.dbconnection.SubsetStatus;
+import de.julielab.costosys.dbconnection.util.CoStoSysException;
+import de.julielab.costosys.dbconnection.util.CoStoSysRuntimeException;
 import de.julielab.costosys.medline.ConfigurationConstants;
 import de.julielab.costosys.medline.Updater;
 import de.julielab.xml.JulieXMLConstants;
@@ -82,7 +84,7 @@ public class CLI {
 
         // What has to be done
         CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = null;
+        CommandLine cmd;
         try {
             cmd = parser.parse(options, args);
 
@@ -225,12 +227,13 @@ public class CLI {
             boolean mirrorSubset = cmd.hasOption("m");
             boolean all4Subset = cmd.hasOption("a");
             Integer numberRefHops = cmd.hasOption("rh") ? Integer.parseInt(cmd.getOptionValue("rh")) : null;
+            final String copyProcessed = cmd.getOptionValue("cp");
 
             if (tableSchema.matches("[0-9]+")) {
                 tableSchema = dbc.getConfig().getTableSchemaNames().get(Integer.parseInt(tableSchema));
             }
 
-            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
                 switch (mode) {
                     case QUERY:
                         QueryOptions qo = new QueryOptions();
@@ -255,7 +258,7 @@ public class CLI {
 
                     case SUBSET:
                         doSubset(dbc, subsetTableName, fileStr, queryStr, superTableName, subsetJournalFileName,
-                                subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops);
+                                subsetQuery, mirrorSubset, whereClause, all4Subset, randomSubsetSize, numberRefHops, copyProcessed);
                         break;
 
                     case RESET:
@@ -264,7 +267,7 @@ public class CLI {
                         } else {
                             boolean files = cmd.hasOption("f");
                             try {
-                                boolean doReset = false;
+                                boolean doReset = true;
                                 if (!files || StringUtils.isBlank(fileStr)) {
                                     boolean np = cmd.hasOption("np");
                                     boolean ne = cmd.hasOption("ne");
@@ -287,8 +290,8 @@ public class CLI {
                                             String input = getYesNoAnswer("The subset table \"" + subsetTableName
                                                     + "\" is in process or already processed over 50%."
                                                     + " Do you really wish to reset it completely into an unprocessed state? (yes/no)");
-                                            if ("yes".equals(input))
-                                                doReset = true;
+                                            if (!"yes".equals(input))
+                                                doReset = false;
                                         }
                                     }
                                     if (doReset)
@@ -472,20 +475,26 @@ public class CLI {
 
     private static boolean doSubset(DataBaseConnector dbc, String subsetTableName, String fileStr, String queryStr,
                                     String superTableName, String subsetJournalFileName, String subsetQuery, boolean mirrorSubset,
-                                    String whereClause, boolean all4Subset, String randomSubsetSize, Integer numberRefHops)
-            throws SQLException {
+                                    String whereClause, boolean all4Subset, String randomSubsetSize, Integer numberRefHops, String copyProcessed)
+            throws SQLException, CoStoSysException {
         String comment = "<no comment given>";
         boolean error;
-        ArrayList<String> ids = null;
+        List<String> ids = null;
+        List<Object[]> processedIds = Collections.emptyList();
         String condition = null;
 
         error = checkSchema(dbc, subsetTableName);
         if (!error) {
+            if (copyProcessed != null && !copyProcessed.isBlank()) {
+                LOG.info("Retrieving rows marked as processed from subset table {}", copyProcessed);
+                processedIds = dbc.getProcessedPrimaryKeys(copyProcessed);
+                LOG.info("Retrieved {} processed primary keys", processedIds.size());
+            }
             if (subsetJournalFileName != null) {
                 try {
                     ids = asList(subsetJournalFileName);
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    throw new CoStoSysRuntimeException(e);
                 }
                 if (ids.size() == 0) {
                     LOG.error(subsetJournalFileName + " is empty.");
@@ -516,7 +525,8 @@ public class CLI {
                         + " with where clause \"" + whereClause + "\"";
             } else if (randomSubsetSize != null) {
                 try {
-                    new Integer(randomSubsetSize);
+                    // this is just to provoke an exception in case randomSubsetSize does not contain an integer
+                    Integer.valueOf(randomSubsetSize);
                     comment = "Subset created " + new Date().toString() + " by randomly selecting " + randomSubsetSize
                             + " rows from " + superTableName + ".";
                 } catch (NumberFormatException e) {
@@ -531,7 +541,7 @@ public class CLI {
                 }
                 if (ids.size() == 0) {
                     LOG.error(fileStr + " is empty.");
-                    error = true;
+                    throw new CoStoSysException(fileStr + " is empty.");
                 }
                 condition = dbc.getFieldConfiguration(dbc.getActiveTableSchema()).getPrimaryKey()[0];
                 comment = "Subset created " + new Date().toString() + " by matching with " + superTableName + " on "
@@ -539,8 +549,8 @@ public class CLI {
             } else if (mirrorSubset) {
                 comment = "Subset created " + new Date().toString() + " as to mirror " + superTableName + ";";
             } else {
-                error = true;
                 LOG.error("You must choose a way to define the subset.");
+                error = true;
             }
 
             comment = escapeSingleQuotes(comment);
@@ -551,13 +561,15 @@ public class CLI {
             error = true;
         }
         if (!error) {
-            try (CoStoSysConnection connPair = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
                 if (!dbc.tableExists(subsetTableName)) {
                     logMessage("No table with the name \"" + subsetTableName + "\" exists, creating new subset table...");
                     dbc.createSubsetTable(subsetTableName, superTableName, numberRefHops, comment);
                     logMessage("Created table " + subsetTableName);
-                } else
+                } else {
                     LOG.error("Table " + subsetTableName + " allready exists.");
+                    error = true;
+                }
                 if (dbc.isEmpty(subsetTableName) && !error) {
                     if (all4Subset)
                         dbc.initSubset(subsetTableName, superTableName);
@@ -576,6 +588,11 @@ public class CLI {
                     error = true;
                 }
             }
+        }
+        if (!error && !processedIds.isEmpty()) {
+            LOG.info("Marking {} rows as processed in the new subset table {}", processedIds.size(), subsetTableName);
+            final int numSuccessful = dbc.markAsProcessed(subsetTableName, processedIds);
+            LOG.info("{} rows were successfully marked as processed in {}.", numSuccessful, subsetTableName);
         }
         return error;
     }
@@ -849,7 +866,7 @@ public class CLI {
         modes.addOption(buildOption("u", "update", "Update _data table", "file/dir to update from"));
         modes.addOption(buildOption("um", "updatemedline", "Update _data table from PubMed/MEDLINE update files. Keeps track of already applied update files via an internal table. The parameter is a XML file holding information about the update file location. It is the same file format used for the -im mode.", "XML MEDLINE configuration"));
         modes.addOption(buildOption("s", "subset",
-                "Define a subset table; use -f, -o, -a, -m, -w or -r to specify the subsets source.",
+                "Define a subset table; use -f, -o, -a, -m, -w or -r to specify the subsets source. Use -z to specify the referenced data table, defaults to _data.",
                 "name of the new subset table"));
         modes.addOption(buildOption("re", "reset",
                 "Resets a subset table to a not-yet-processed state. Flags:\n" + "-np only reset non-processed items\n"
@@ -910,7 +927,11 @@ public class CLI {
         exclusive.addOption(
                 buildOption("l", "limit", "For use with -q. Restricts the number of documents returned.", "limit"));
 
+        options.addOptionGroup(exclusive);
 
+        // ----------------- non-exclusive options meant for specific modes --------
+
+        // for the status report
         options.addOption(buildOption("he", "has errors",
                 "Flag for -st(atus) mode to add the 'has errors' statistic to a subset status report."));
         options.addOption(buildOption("isp", "is processed",
@@ -922,7 +943,7 @@ public class CLI {
         options.addOption(buildOption("slc", "show last component",
                 "Flag for -st(atus) mode to add the 'last component' statistic to a subset status report."));
 
-
+        // for partial subset resets
         options.addOption(buildOption("np", "not processed",
                 "Flag for -re(set) mode to restrict to non-processed table rows. May be combined with -ne, -lc."));
         options.addOption(buildOption("ne", "no errors",
@@ -931,7 +952,8 @@ public class CLI {
                 "Option for -re(set) mode to restrict to table rows to a given last component identifier. May be combined with -np, -ne.",
                 "component name"));
 
-        options.addOptionGroup(exclusive);
+        // for subset creation
+        options.addOption(buildOption("cp", "copyprocessed", "For use with -s. Mark all documents to be processed in the new subset table that are marked as processed in the argument subset table.", "subset table to copy the processed markers from"));
 
         // --------------- optional details for many modes --------------
         options.addOption(buildOption("z", "superset",
