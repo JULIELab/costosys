@@ -72,8 +72,16 @@ public class CLITest {
     public void testMarkAsProcessed() throws Exception {
         final SubsetStatus processedBefore = dbc.status("all_subset", EnumSet.of(DataBaseConnector.StatusElement.IS_PROCESSED));
         assertEquals(0L, (long)processedBefore.isProcessed);
+
+        // Mark only a few documents
         assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-mp", "all_subset", "-f", Path.of("src", "test", "resources", "markAsProcessedTestIds.txt").toString()})).doesNotThrowAnyException();
         final SubsetStatus processedAfter = dbc.status("all_subset", EnumSet.of(DataBaseConnector.StatusElement.IS_PROCESSED));
         assertEquals(2L, (long)processedAfter.isProcessed);
+
+        // Now mark all documents
+        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-mp", "all_subset"})).doesNotThrowAnyException();
+        final SubsetStatus processedAll = dbc.status("all_subset", EnumSet.of(DataBaseConnector.StatusElement.IS_PROCESSED));
+        System.out.println("WARN:" + dbc.getNumRows("all_subset"));
+        assertEquals(dbc.getNumRows("all_subset"), (long)processedAll.isProcessed);
     }
 }

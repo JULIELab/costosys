@@ -762,7 +762,7 @@ public class DataBaseConnector {
         try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
             try {
                 final Statement stmt = costoConn.createStatement();
-                return (int)stmt.executeLargeUpdate(sql);
+                return (int)stmt.executeUpdate(sql);
             } catch (SQLException e) {
                 LOG.error("Could not update subset table {} for all rows being marked as processed.", table, e);
             }

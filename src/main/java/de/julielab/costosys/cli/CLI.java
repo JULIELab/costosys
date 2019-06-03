@@ -391,6 +391,8 @@ public class CLI {
             }
             final List<Object[]> primaryKeys = convertFileToPrimaryKeyList(fileStr);
             dbc.markAsProcessed(subsetTable, primaryKeys);
+        } else {
+            dbc.markAsProcessed(subsetTable);
         }
     }
 
