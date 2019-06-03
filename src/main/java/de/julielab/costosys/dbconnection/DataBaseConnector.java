@@ -752,6 +752,25 @@ public class DataBaseConnector {
     }
 
     /**
+     * Modifies a subset table, marking all its entries as processed.
+     *
+     * @param table name of the subset table
+     * @return The number of successfully modified table rows.
+     */
+    public int markAsProcessed(String table) {
+        String sql = "UPDATE " + table + " SET " + Constants.PROCESSED + " = TRUE";
+        try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+            try {
+                final Statement stmt = costoConn.createStatement();
+                return (int)stmt.executeLargeUpdate(sql);
+            } catch (SQLException e) {
+                LOG.error("Could not update subset table {} for all rows being marked as processed.", table, e);
+            }
+        }
+        return 0;
+    }
+
+    /**
      * <p>
      * Executes a given SQL command (must end with "WHERE "!) an extends the
      * WHERE-clause with the primary keys, set to the values in ids.

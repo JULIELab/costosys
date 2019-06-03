@@ -383,13 +383,15 @@ public class CLI {
             LOG.error("The subset table {} does not exist.", subsetTable);
             return;
         }
-        final File idsFile = new File(fileStr);
-        if (!idsFile.exists()) {
-            LOG.error("The ID list file {} does not exist.", fileStr);
-            return;
+        if (fileStr != null) {
+            final File idsFile = new File(fileStr);
+            if (!idsFile.exists()) {
+                LOG.error("The ID list file {} does not exist.", fileStr);
+                return;
+            }
+            final List<Object[]> primaryKeys = convertFileToPrimaryKeyList(fileStr);
+            dbc.markAsProcessed(subsetTable, primaryKeys);
         }
-        final List<Object[]> primaryKeys = convertFileToPrimaryKeyList(fileStr);
-        dbc.markAsProcessed(subsetTable, primaryKeys);
     }
 
     public static String findConfigurationFile() throws ConfigurationNotFoundException {
