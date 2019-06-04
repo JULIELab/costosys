@@ -1,11 +1,10 @@
 package de.julielab.costosys.cli;
 
 
-import de.julielab.costosys.cli.CLI;
-import de.julielab.costosys.dbconnection.SubsetStatus;
-import de.julielab.jcore.db.test.DBTestUtils;
 import de.julielab.costosys.Constants;
 import de.julielab.costosys.dbconnection.DataBaseConnector;
+import de.julielab.costosys.dbconnection.SubsetStatus;
+import de.julielab.jcore.db.test.DBTestUtils;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
@@ -15,7 +14,8 @@ import org.testng.annotations.Test;
 import java.nio.file.Path;
 import java.util.EnumSet;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.testng.AssertJUnit.assertEquals;
 
 public class CLITest {
@@ -43,7 +43,7 @@ public class CLITest {
 
     @Test
     public void testImport()  {
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-i", "src/test/resources/pubmedsample18n0001.xml.gz"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-i", "src/test/resources/pubmedsample18n0001.xml.gz"})).doesNotThrowAnyException();
         dbc.reserveConnection();
         assertThat(dbc.tableExists(Constants.DEFAULT_DATA_TABLE_NAME));
         assertThat(dbc.getNumRows(Constants.DEFAULT_DATA_TABLE_NAME)).isEqualTo(177);
@@ -51,21 +51,21 @@ public class CLITest {
 
     @Test(dependsOnMethods = "testImport")
     public void testCreateSubset() {
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-s", "all_subset", "-a"})).doesNotThrowAnyException();
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-s", "random_subset", "-r", "10"})).doesNotThrowAnyException();
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-s", "mirror_subset", "-m"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-s", "all_subset", "-a"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-s", "random_subset", "-r", "10"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-s", "mirror_subset", "-m"})).doesNotThrowAnyException();
     }
 
     @Test(dependsOnMethods = "testCreateSubset")
     public void testStatus() {
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-st", "all_subset"})).doesNotThrowAnyException();
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-st", "random_subset"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-st", "all_subset"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-st", "random_subset"})).doesNotThrowAnyException();
         assertThatCode(() -> CLI.main(new String[]{"-st", "mirror_subset"})).doesNotThrowAnyException();
     }
 
     @Test(dependsOnMethods = "testImport")
     public void testQueryDocuments() {
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-q", "-z", "all_subset"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-q", "-z", "all_subset"})).doesNotThrowAnyException();
     }
 
     @Test(dependsOnMethods = {"testImport", "testCreateSubset"})
@@ -74,12 +74,12 @@ public class CLITest {
         assertEquals(0L, (long)processedBefore.isProcessed);
 
         // Mark only a few documents
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-mp", "all_subset", "-f", Path.of("src", "test", "resources", "markAsProcessedTestIds.txt").toString()})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-mp", "all_subset", "-f", Path.of("src", "test", "resources", "markAsProcessedTestIds.txt").toString()})).doesNotThrowAnyException();
         final SubsetStatus processedAfter = dbc.status("all_subset", EnumSet.of(DataBaseConnector.StatusElement.IS_PROCESSED));
         assertEquals(2L, (long)processedAfter.isProcessed);
 
         // Now mark all documents
-        assertThatCode(() -> de.julielab.costosys.cli.CLI.main(new String[]{"-mp", "all_subset"})).doesNotThrowAnyException();
+        assertThatCode(() -> CLI.main(new String[]{"-mp", "all_subset"})).doesNotThrowAnyException();
         final SubsetStatus processedAll = dbc.status("all_subset", EnumSet.of(DataBaseConnector.StatusElement.IS_PROCESSED));
         System.out.println("WARN:" + dbc.getNumRows("all_subset"));
         assertEquals(dbc.getNumRows("all_subset"), (long)processedAll.isProcessed);

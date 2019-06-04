@@ -11,6 +11,109 @@ public class CliOptionsProvider {
         Options options = new Options();
 
         // -------------------- OptionGroup for available modes --------------
+        addModes(options);
+
+        // -------------------- OptionGroup for exclusive parameters--------------
+        addOptionExclusiveParameters(options);
+
+        // ----------------- non-exclusive options meant for specific modes --------
+        addSharedParameters(options);
+
+
+        // --------------- optional details for many modes --------------
+        addOptionalSharedParameters(options);
+
+        // -------------------- authentication --------------------
+        options.addOption(buildOption("U", "url",
+                "URL to database server (e.g. jdbc:postgresql://<host name>/<db name>)", "url"));
+        options.addOption(buildOption("n", "username", "username for database", "username"));
+        options.addOption(buildOption("p", "pass", "password for database", "password"));
+        options.addOption(buildOption("pgs", "pgschema", "Postgres Schema to use", "schema"));
+        options.addOption(buildOption("srv", "server", "Server name to connect to", "servername"));
+        options.addOption(buildOption("db", "database", "Database to connect to", "database"));
+        options.addOption(buildOption("dbc", "databaseconfiguration",
+                "XML file specifying the user configuration (defaults to dbcConfiguration.xml).", "Config File"));
+
+        return options;
+    }
+
+    private static void addOptionalSharedParameters(Options options) {
+        options.addOption(buildOption("z", "superset",
+                "Provides a superset name for definition of a subset or the name of a data table.",
+                "name of the superset table"));
+        options.addOption(buildOption("v", "verbose", "Activate verbose informational ouput of the tool's actions"));
+
+        options.addOption(buildOption("d", "delimiter", "Display a line of \"-\" as delimiter between the results."));
+        options.addOption(buildOption("pas", "pubmedarticleset",
+                "For use with -q. The queried documents will be interpreted as Medline XML documents and will be enclosed in PubmedArticleSet."));
+        options.addOption(buildOption("out", "out",
+                "The file or directory where query results are written to. By default, a directory will be created and it will be filled with one file per document. The files will have the name of their database primary key. Modifying parameters:\n"
+                        + "Use -bs to create subdirectories for batches of files.\n"
+                        + "Use -pas to create no directory but a single XML file representing a PubmedArticleSet. This assumes that the queried documents are Medline or Pubmed XML documents.",
+                "output directory"));
+        options.addOption(buildOption("bs", "batchsize",
+                "The number of queried documents (by -q and -out) which should be written in one directory. Subdirectories will be created at need.",
+                "batchsize"));
+        options.addOption(buildOption("x", "xpath",
+                "When querying documents using -q, you may specify one or more XPath expressions to restrict the output to the elements referenced by your XPath expressions. Several XPaths must be delimited by a single comma.",
+                "xpath"));
+        options.addOption(buildOption("rh", "referencehops",
+                "The maximum number of allowed hops to tables referenced with a foreign key when creating subset tables.",
+                "max number of hops"));
+        options.addOption(buildOption("ts", "tableschema",
+                "Table Schema to use; currently only supported by -q mode. The name can be given or the index as retrieved by the -lts mode.",
+                "schemaname"));
+    }
+
+    private static void addSharedParameters(Options options) {
+        // for the status report
+        options.addOption(buildOption("he", "has errors",
+                "Flag for -st(atus) mode to add the 'has errors' statistic to a subset status report."));
+        options.addOption(buildOption("isp", "is processed",
+                "Flag for -st(atus) mode to add the 'is processed' statistic to a subset status report."));
+        options.addOption(buildOption("inp", "is in process",
+                "Flag for -st(atus) mode to add the 'is in process' statistic to a subset status report."));
+        options.addOption(buildOption("to", "total",
+                "Flag for -st(atus) mode to add the 'total' statistic to a subset status report."));
+        options.addOption(buildOption("slc", "show last component",
+                "Flag for -st(atus) mode to add the 'last component' statistic to a subset status report."));
+
+        // for partial subset resets
+        options.addOption(buildOption("np", "not processed",
+                "Flag for -re(set) mode to restrict to non-processed table rows. May be combined with -ne, -lc."));
+        options.addOption(buildOption("ne", "no errors",
+                "Flag for -re(set) mode to restrict to table rows without errors. May be combined with -np, -lc."));
+        options.addOption(buildOption("lc", "last component",
+                "Option for -re(set) mode to restrict to table rows to a given last component identifier. May be combined with -np, -ne.",
+                "component name"));
+
+        // for subset creation
+        options.addOption(buildOption("cp", "copyprocessed", "For use with -s. Mark all documents to be processed in the new subset table that are marked as processed in the argument subset table.", "subset table to copy the processed markers from"));
+    }
+
+    private static void addOptionExclusiveParameters(Options options) {
+        OptionGroup exclusive = new OptionGroup();
+
+        exclusive.addOption(buildOption("f", "file",
+                "Set the file used for query, subset creation or partial subset reset.", "file"));
+        exclusive.addOption(buildOption("o", "online",
+                "Defines the subset by a PubMed query - remember to wrap it in double quotation marks!", "query"));
+        exclusive.addOption(buildOption("a", "all", "Use all entries of the _data table for the subset."));
+        exclusive.addOption(buildOption("r", "random",
+                "Generates a random subset, you must provide its size as a parameter. Often used with -z.", "size"));
+        exclusive.addOption(buildOption("m", "mirror",
+                "Creates a subset table which mirrors the database table. I.e. when the data table gets new records, the mirror subset(s) will be updated accordingly."));
+        exclusive
+                .addOption(buildOption("w", "where", "Uses a SQL WHERE clause during subset definition.", "condition"));
+        exclusive.addOption(
+                buildOption("j", "journals", "Define a subset by providing a file with journal names.", "file"));
+        exclusive.addOption(
+                buildOption("l", "limit", "For use with -q. Restricts the number of documents returned.", "limit"));
+
+        options.addOptionGroup(exclusive);
+    }
+
+    private static void addModes(Options options) {
         OptionGroup modes = new OptionGroup();
 
         modes.addOption(buildOption("i", "import", "Import data into the _data table", "file/dir to import"));
@@ -60,93 +163,6 @@ public class CliOptionsProvider {
         modes.setRequired(true);
 
         options.addOptionGroup(modes);
-
-        // -------------------- OptionGroup for exclusive parameters--------------
-        OptionGroup exclusive = new OptionGroup();
-
-        exclusive.addOption(buildOption("f", "file",
-                "Set the file used for query, subset creation or partial subset reset.", "file"));
-        exclusive.addOption(buildOption("o", "online",
-                "Defines the subset by a PubMed query - remember to wrap it in double quotation marks!", "query"));
-        exclusive.addOption(buildOption("a", "all", "Use all entries of the _data table for the subset."));
-        exclusive.addOption(buildOption("r", "random",
-                "Generates a random subset, you must provide its size as a parameter. Often used with -z.", "size"));
-        exclusive.addOption(buildOption("m", "mirror",
-                "Creates a subset table which mirrors the database table. I.e. when the data table gets new records, the mirror subset(s) will be updated accordingly."));
-        exclusive
-                .addOption(buildOption("w", "where", "Uses a SQL WHERE clause during subset definition.", "condition"));
-        exclusive.addOption(
-                buildOption("j", "journals", "Define a subset by providing a file with journal names.", "file"));
-        exclusive.addOption(
-                buildOption("l", "limit", "For use with -q. Restricts the number of documents returned.", "limit"));
-
-        options.addOptionGroup(exclusive);
-
-        // ----------------- non-exclusive options meant for specific modes --------
-
-        // for the status report
-        options.addOption(buildOption("he", "has errors",
-                "Flag for -st(atus) mode to add the 'has errors' statistic to a subset status report."));
-        options.addOption(buildOption("isp", "is processed",
-                "Flag for -st(atus) mode to add the 'is processed' statistic to a subset status report."));
-        options.addOption(buildOption("inp", "is in process",
-                "Flag for -st(atus) mode to add the 'is in process' statistic to a subset status report."));
-        options.addOption(buildOption("to", "total",
-                "Flag for -st(atus) mode to add the 'total' statistic to a subset status report."));
-        options.addOption(buildOption("slc", "show last component",
-                "Flag for -st(atus) mode to add the 'last component' statistic to a subset status report."));
-
-        // for partial subset resets
-        options.addOption(buildOption("np", "not processed",
-                "Flag for -re(set) mode to restrict to non-processed table rows. May be combined with -ne, -lc."));
-        options.addOption(buildOption("ne", "no errors",
-                "Flag for -re(set) mode to restrict to table rows without errors. May be combined with -np, -lc."));
-        options.addOption(buildOption("lc", "last component",
-                "Option for -re(set) mode to restrict to table rows to a given last component identifier. May be combined with -np, -ne.",
-                "component name"));
-
-        // for subset creation
-        options.addOption(buildOption("cp", "copyprocessed", "For use with -s. Mark all documents to be processed in the new subset table that are marked as processed in the argument subset table.", "subset table to copy the processed markers from"));
-
-        // --------------- optional details for many modes --------------
-        options.addOption(buildOption("z", "superset",
-                "Provides a superset name for definition of a subset or the name of a data table.",
-                "name of the superset table"));
-        options.addOption(buildOption("v", "verbose", "Activate verbose informational ouput of the tool's actions"));
-
-        options.addOption(buildOption("d", "delimiter", "Display a line of \"-\" as delimiter between the results."));
-        options.addOption(buildOption("pas", "pubmedarticleset",
-                "For use with -q. The queried documents will be interpreted as Medline XML documents and will be enclosed in PubmedArticleSet."));
-        options.addOption(buildOption("out", "out",
-                "The file or directory where query results are written to. By default, a directory will be created and it will be filled with one file per document. The files will have the name of their database primary key. Modifying parameters:\n"
-                        + "Use -bs to create subdirectories for batches of files.\n"
-                        + "Use -pas to create no directory but a single XML file representing a PubmedArticleSet. This assumes that the queried documents are Medline or Pubmed XML documents.",
-                "output directory"));
-        options.addOption(buildOption("bs", "batchsize",
-                "The number of queried documents (by -q and -out) which should be written in one directory. Subdirectories will be created at need.",
-                "batchsize"));
-        options.addOption(buildOption("x", "xpath",
-                "When querying documents using -q, you may specify one or more XPath expressions to restrict the output to the elements referenced by your XPath expressions. Several XPaths must be delimited by a single comma.",
-                "xpath"));
-        options.addOption(buildOption("rh", "referencehops",
-                "The maximum number of allowed hops to tables referenced with a foreign key when creating subset tables.",
-                "max number of hops"));
-        options.addOption(buildOption("ts", "tableschema",
-                "Table Schema to use; currently only supported by -q mode. The name can be given or the index as retrieved by the -lts mode.",
-                "schemaname"));
-
-        // -------------------- authentication --------------------
-        options.addOption(buildOption("U", "url",
-                "URL to database server (e.g. jdbc:postgresql://<host name>/<db name>)", "url"));
-        options.addOption(buildOption("n", "username", "username for database", "username"));
-        options.addOption(buildOption("p", "pass", "password for database", "password"));
-        options.addOption(buildOption("pgs", "pgschema", "Postgres Schema to use", "schema"));
-        options.addOption(buildOption("srv", "server", "Server name to connect to", "servername"));
-        options.addOption(buildOption("db", "database", "Database to connect to", "database"));
-        options.addOption(buildOption("dbc", "databaseconfiguration",
-                "XML file specifying the user configuration (defaults to dbcConfiguration.xml).", "Config File"));
-
-        return options;
     }
 
     private static Option buildOption(String shortName, String longName, String description, String... arguments) {
