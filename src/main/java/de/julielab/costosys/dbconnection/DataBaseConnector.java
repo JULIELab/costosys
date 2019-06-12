@@ -2040,8 +2040,8 @@ public class DataBaseConnector {
         // The original where was: 'where (is_processed = TRUE OR
         // is_in_process = TRUE) AND %s'
         String updateFormatString = "UPDATE " + subsetTableName + " SET " + Constants.IS_PROCESSED + "=FALSE, "
-                + Constants.IN_PROCESS + "= FALSE, " + Constants.LAST_COMPONENT + "='" + DEFAULT_PIPELINE_STATE + "," + Constants.HOST_NAME + "=NULL"
-                + "' WHERE %s";
+                + Constants.IN_PROCESS + "= FALSE, " + Constants.LAST_COMPONENT + "='" + DEFAULT_PIPELINE_STATE + "'," + Constants.HOST_NAME + "=NULL"
+                + " WHERE %s";
         return performBatchUpdate(conn, pkValues, updateFormatString, schemaName);
     }
 
