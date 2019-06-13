@@ -2976,7 +2976,6 @@ public class DataBaseConnector {
         }
 
         final String finalQuery = String.format("SELECT %s FROM %s%s%s", selectStmt, tableName, joinStmt, where);
-        System.out.println(finalQuery);
         try {
 
             DBCIterator<byte[][]> it = new DBCIterator<>() {
