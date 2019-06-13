@@ -128,6 +128,7 @@ public class DataBaseConnector {
     private String user;
     private String password;
     private ConfigReader config;
+
     /**************************************************************************
      *************************** Constructors ********************************
      **************************************************************************/
@@ -762,7 +763,7 @@ public class DataBaseConnector {
         try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
             try {
                 final Statement stmt = costoConn.createStatement();
-                return (int)stmt.executeUpdate(sql);
+                return (int) stmt.executeUpdate(sql);
             } catch (SQLException e) {
                 LOG.error("Could not update subset table {} for all rows being marked as processed.", table, e);
             }
@@ -2864,15 +2865,19 @@ public class DataBaseConnector {
      * </p>
      * <p>
      * For more specific information, please refer to
-     * {@link #queryDataTable(String, String, String)}.
+     * {@link #queryDataTable(String, String, String[], String)}.
      * </p>
      *
      * @param tableName      Name of a data table.
      * @param whereCondition Optional additional specifications for the SQL "SELECT" statement.
-     * @see #queryDataTable(String, String, String)
+     * @see #queryDataTable(String, String, String[], String)
      */
     public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition) {
-        return queryDataTable(tableName, whereCondition, activeTableSchema);
+        return queryDataTable(tableName, whereCondition, null, activeTableSchema);
+    }
+
+    public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition, String[] tablesToJoin, String schemaName) {
+        return queryDataTable(tableName, whereCondition, tablesToJoin, new String[]{schemaName});
     }
 
     /**
@@ -2895,35 +2900,86 @@ public class DataBaseConnector {
      *
      * @param tableName      Name of a data table.
      * @param whereCondition Optional additional specifications for the SQL "SELECT" statement.
-     * @param schemaName     The table schema name to determine which columns should be
-     *                       retrieved. // * @return An iterator over <code>byte[][]</code> .
-     *                       Each returned byte array contains one nested byte array for each
-     *                       retrieved column, holding the column's data in a sequence of
-     *                       bytes.
+     * @param schemaNames    The table schema names to determine which columns should be
+     *                       retrieved.
+     * @return An iterator over <code>byte[][]</code> .
+     * Each returned byte array contains one nested byte array for each
+     * retrieved column, holding the column's data in a sequence of
+     * bytes.
      */
-    public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition, String schemaName) {
+    public DBCIterator<byte[][]> queryDataTable(String tableName, String whereCondition, String[] tablesToJoin, String[] schemaNames) {
         if (!withConnectionQueryBoolean(c -> c.tableExists(tableName)))
             throw new IllegalArgumentException("Table \"" + tableName + "\" does not exist.");
 
-        final FieldConfig fieldConfig = fieldConfigs.get(schemaName);
+        if (tablesToJoin != null && schemaNames.length != tablesToJoin.length+1)
+            throw new IllegalArgumentException("There are " + schemaNames.length + " table schema names given but " + tablesToJoin.length + " tables are requested.");
+
+        FieldConfig fieldConfig = fieldConfigs.get(schemaNames[0]);
 
         // Build the correct query.
-        String query;
         String selectedColumns = StringUtils.join(fieldConfig.getColumnsToRetrieve(), ",");
         // prepend there WHERE keyword if not already present and if we don't
         // actually have only a LIMIT constraint
-        if (whereCondition != null && !whereCondition.trim().toUpperCase().startsWith("WHERE")
-                && !whereCondition.trim().toUpperCase().matches("LIMIT +[0-9]+"))
-            query = String.format("SELECT %s FROM %s WHERE %s", selectedColumns, tableName, whereCondition);
-        else if (whereCondition != null)
-            query = String.format("SELECT %s FROM %s %s", selectedColumns, tableName, whereCondition);
+        String where = whereCondition != null ? whereCondition.trim() : null;
+        if (where != null && !where.toUpperCase().startsWith("WHERE")
+                && !where.toUpperCase().matches("LIMIT +[0-9]+"))
+            where = " WHERE " + where;
+        else if (where != null)
+            where = " " + where;
         else
-            query = String.format("SELECT %s FROM %s", selectedColumns, tableName);
-        final String finalQuery = query;
+            where = "";
 
+        String joinStmt = "";
+        String selectStmt = selectedColumns;
+        final List<Map<String, String>> returnedFields = new ArrayList<>();
+        if (tablesToJoin != null) {
+            String[] primaryKey = null;
+            List<String> select = new ArrayList<>();
+            List<String> leftJoin = new ArrayList<>();
+            String[] allTables = new String[tablesToJoin.length + 1];
+            allTables[0] = tableName;
+            System.arraycopy(tablesToJoin, 0, allTables, 1, tablesToJoin.length);
+
+            for (int i = 0; i < schemaNames.length; i++) {
+                String schemaName = schemaNames[i];
+                final FieldConfig configForSchema = fieldConfigs.get(schemaName);
+                returnedFields.addAll(configForSchema.getFieldsToRetrieve());
+            }
+
+            for (int i = 0; i < allTables.length; i++) {
+                fieldConfig = fieldConfigs.get(schemaNames[i]);
+                String[] columnsToRetrieve = fieldConfig.getColumnsToRetrieve();
+                for (int j = 0; j < columnsToRetrieve.length; j++) {
+                    String column = allTables[i] + "." + columnsToRetrieve[j];
+                    select.add(column);
+                }
+                if (i == 0) {
+                    // Get the names of the primary keys once, since they
+                    // should be identical for all tables.
+                    primaryKey = fieldConfig.getPrimaryKey();
+                } else {
+                    String primaryKeyMatch = "";
+                    for (int j = 0; j < primaryKey.length; j++) {
+                        primaryKeyMatch = tableName + "." + primaryKey[j] + "=" + allTables[i] + "." + primaryKey[j];
+                        if (!(j == primaryKey.length - 1))
+                            primaryKeyMatch = primaryKeyMatch + " AND ";
+                    }
+                    String join = "LEFT JOIN " + allTables[i] + " ON " + primaryKeyMatch;
+                    leftJoin.add(join);
+                }
+            }
+            joinStmt = " " + StringUtils.join(leftJoin, " ");
+            selectStmt = StringUtils.join(select, ",");
+        } else {
+            // No additional tables given
+            returnedFields.addAll(fieldConfig.getFieldsToRetrieve());
+        }
+
+        final String finalQuery = String.format("SELECT %s FROM %s%s%s", selectStmt, tableName, joinStmt, where);
+        System.out.println(finalQuery);
         try {
 
-            DBCIterator<byte[][]> it = new DBCIterator<byte[][]>() {
+            DBCIterator<byte[][]> it = new DBCIterator<>() {
 
                 private CoStoSysConnection conn = reserveConnection();
                 private ResultSet rs = doQuery(conn);
@@ -2953,12 +3009,11 @@ public class DataBaseConnector {
                 @Override
                 public byte[][] next() {
                     if (hasNext) {
-                        List<Map<String, String>> fields = fieldConfig.getFields();
                         try {
-                            byte[][] retrievedData = new byte[fieldConfig.getColumnsToRetrieve().length][];
+                            byte[][] retrievedData = new byte[returnedFields.size()][];
                             for (int i = 0; i < retrievedData.length; i++) {
                                 retrievedData[i] = rs.getBytes(i + 1);
-                                if (Boolean.parseBoolean(fields.get(i).get(JulieXMLConstants.GZIP)))
+                                if (Boolean.parseBoolean(returnedFields.get(i).get(JulieXMLConstants.GZIP)))
                                     retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
                             }
                             hasNext = rs.next();
@@ -3022,7 +3077,7 @@ public class DataBaseConnector {
      * table and then gets the actual documents from the data table (necessary for
      * the data table - subset paradigm). As this is unnecessary when querying
      * directly from a data table, for that kind of queries this method calls
-     * {@link #queryDataTable(String, String, String)}.
+     * {@link #queryDataTable(String, String, String[], String)}.
      * </p>
      * <p>
      * The number of returned documents is restricted in number by
@@ -3050,10 +3105,10 @@ public class DataBaseConnector {
      * @return An iterator returning documents references from or in the table
      * <code>tableName</code>.
      * @throws SQLException
-     * @see #queryDataTable(String, String, String)
+     * @see #queryDataTable(String, String, String[], String)
      */
     public DBCIterator<byte[][]> querySubset(final String tableName, final String whereClause, final long limitParam,
-                                             Integer numberRefHops, final String schemaName) throws SQLException {
+                                             Integer numberRefHops, final String schemaName) {
         if (!withConnectionQueryBoolean(c -> c.tableExists(tableName)))
             throw new IllegalArgumentException("Table \"" + tableName + "\" does not exist.");
 
@@ -3069,7 +3124,7 @@ public class DataBaseConnector {
             // it corresponding to the limit parameter.
             if (limitParam > 0 && !newWhereClause.toLowerCase().matches(".*limit +[0-9]+.*"))
                 newWhereClause += " LIMIT " + limitParam;
-            return queryDataTable(tableName, newWhereClause, schemaName);
+            return queryDataTable(tableName, newWhereClause, null, schemaName);
         }
 
 

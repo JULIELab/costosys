@@ -279,8 +279,8 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 // WHERE (dataTable.pmid=1) OR (dataTable.pmid=2) OR ...'
             } else {
                 String[] primaryKey = null;
-                ArrayList<String> select = new ArrayList<String>();
-                ArrayList<String> leftJoin = new ArrayList<String>();
+                List<String> select = new ArrayList<>();
+                List<String> leftJoin = new ArrayList<>();
 
                 for (int i = 0; i < table.length; i++) {
                     fieldConfig = dbc.getFieldConfiguration(schemaName[i]);

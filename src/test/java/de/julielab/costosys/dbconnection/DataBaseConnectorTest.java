@@ -2,16 +2,22 @@ package de.julielab.costosys.dbconnection;
 
 import de.julielab.costosys.Constants;
 import de.julielab.costosys.cli.TableNotFoundException;
+import de.julielab.costosys.configuration.FieldConfig;
 import de.julielab.costosys.dbconnection.util.TableSchemaMismatchException;
+import de.julielab.xml.JulieXMLConstants;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import javax.xml.XMLConstants;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -20,13 +26,13 @@ import static org.testng.AssertJUnit.assertEquals;
 public class DataBaseConnectorTest {
 
     public static PostgreSQLContainer postgres;
-    private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
+    private static DataBaseConnector dbc;
 
     @BeforeClass
     public static void setUp() {
         postgres = new PostgreSQLContainer();
         postgres.start();
-        dbc = new de.julielab.costosys.dbconnection.DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
     }
 
@@ -65,6 +71,47 @@ public class DataBaseConnectorTest {
         List<Object[]> retrievedKeys = dbc.retrieveAndMark("testsubset", "unit-test", "localhost", "1", 2, null);
         assertEquals(0, retrievedKeys.size());
         dbc.releaseConnections();
+    }
+
+    @Test(dependsOnMethods = "testRetrieveAndMark")
+    public void testJoinTablesWithDataTable() throws Exception {
+        // Copy the medline_2016 field configuration to create a new configuration with the same fields but without setting the primary key for retrieve and not zipping the
+        // XML field for simplicity of the test. It is important to create new Maps for the fields because otherwise we would override the original field configuration.
+        List<Map<String, String>> additionalTableConfigFields = dbc.getFieldConfiguration("medline_2016").getFields().stream().map(LinkedHashMap::new).collect(Collectors.toList());
+        additionalTableConfigFields.get(0).put(JulieXMLConstants.RETRIEVE, "false");
+        additionalTableConfigFields.get(1).put(JulieXMLConstants.GZIP, "false");
+        final FieldConfig additionalFieldConfig = new FieldConfig(additionalTableConfigFields, "", "medline_2016_additional");
+        dbc.addFieldConfiguration(additionalFieldConfig);
+        // Create two new tables with some dummy values for each row in the test data tables. We will then join those values
+        // when retrieving data from the data table.
+        try (CoStoSysConnection costoConn = dbc.obtainOrReserveConnection()) {
+            dbc.resetSubset("testsubset");
+            final List<Object[]> pksInTable = dbc.retrieveAndMark("testsubset", "testJoinTablesWithDataTable", "testhost", "0");
+            final Statement stmt = costoConn.createStatement();
+            dbc.createTable("additionalTable", "A test table for tests with joining to other tables.");
+            for (int i = 0; i < pksInTable.size(); i++) {
+                Object[] pk = pksInTable.get(i);
+                String sql = String.format("INSERT INTO %s VALUES('%s','%s')", "additionalTable", pk[0], "Value" + i);
+                stmt.execute(sql);
+            }
+            dbc.createTable("additionalTable2", "Another test table for tests with joining to other tables.");
+            for (int i = 0; i < pksInTable.size(); i++) {
+                Object[] pk = pksInTable.get(i);
+                String sql = String.format("INSERT INTO %s VALUES('%s','%s')", "additionalTable2", pk[0], "Value" + (i+42));
+                stmt.execute(sql);
+            }
+            costoConn.commit();
+        }
+        final DBCIterator<byte[][]> data = dbc.queryDataTable("_data._data", null, new String[]{"additionalTable", "additionalTable2"}, new String[]{"medline_2016", "medline_2016_additional", "medline_2016_additional"});
+        int i = 0;
+        while (data.hasNext()) {
+            byte[][] joinedData = data.next();
+            assertEquals(4, joinedData.length);
+            assertThat(new String(joinedData[0], StandardCharsets.UTF_8).matches("[0-9]+"));
+            assertThat(new String(joinedData[1], StandardCharsets.UTF_8)).startsWith("<MedlineCitation");
+            assertThat(new String(joinedData[2], StandardCharsets.UTF_8)).isEqualTo("Value" + i);
+            assertThat(new String(joinedData[3], StandardCharsets.UTF_8)).isEqualTo("Value" + (i+++42));
+        }
     }
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
@@ -123,7 +170,7 @@ public class DataBaseConnectorTest {
         assertThatCode(() -> dbc.importFromRowIterator(Arrays.asList(row).iterator(), "myxmltest", "xmi_text")).doesNotThrowAnyException();
         dbc.releaseConnections();
         // Iterators use their own connection
-        DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, "xmi_text");
+        DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, null, "xmi_text");
         byte[][] next = dbcIterator.next();
         assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
         assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");

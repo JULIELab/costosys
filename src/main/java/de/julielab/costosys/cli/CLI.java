@@ -810,8 +810,6 @@ public class CLI {
                 }
             } catch (IOException e) {
                 e.printStackTrace();
-            } catch (SQLException e) {
-                e.printStackTrace();
             } finally {
                 try {
                     if (bw != null)
