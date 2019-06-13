@@ -18,9 +18,9 @@
  */
 package de.julielab.costosys.configuration;
 
-import java.util.HashMap;
-
 import org.apache.commons.lang3.StringUtils;
+
+import java.util.HashMap;
 
 /**
  * <p>

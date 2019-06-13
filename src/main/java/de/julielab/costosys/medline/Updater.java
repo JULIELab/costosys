@@ -1,17 +1,16 @@
 package de.julielab.costosys.medline;
 
-import de.julielab.xml.JulieXMLConstants;
-import de.julielab.xml.JulieXMLTools;
 import de.julielab.costosys.Constants;
 import de.julielab.costosys.dbconnection.CoStoSysConnection;
 import de.julielab.costosys.dbconnection.DataBaseConnector;
+import de.julielab.xml.JulieXMLConstants;
+import de.julielab.xml.JulieXMLTools;
 import org.apache.commons.configuration2.HierarchicalConfiguration;
 import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.*;

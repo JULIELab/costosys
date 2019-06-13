@@ -1,23 +1,13 @@
 package de.julielab.costosys.cli;
 
+import com.ximpleware.*;
+import de.julielab.xml.JulieXMLTools;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-
-import com.ximpleware.AutoPilot;
-import com.ximpleware.EOFException;
-import com.ximpleware.EncodingException;
-import com.ximpleware.EntityException;
-import com.ximpleware.NavException;
-import com.ximpleware.ParseException;
-import com.ximpleware.VTDGen;
-import com.ximpleware.VTDNav;
-import com.ximpleware.XPathEvalException;
-import com.ximpleware.XPathParseException;
-
-import de.julielab.xml.JulieXMLTools;
 
 public class QueryPubMed {
 	private final static String SITE = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";

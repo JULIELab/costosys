@@ -15,8 +15,10 @@
 
 package de.julielab.costosys.configuration;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import com.ximpleware.VTDException;
+import de.julielab.xml.JulieXMLConstants;
+import org.apache.commons.io.IOUtils;
+import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,12 +27,8 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.io.IOUtils;
-import org.junit.Test;
-
-import com.ximpleware.VTDException;
-
-import de.julielab.xml.JulieXMLConstants;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Tests for methods and general functionality of the DataBaseConnector which

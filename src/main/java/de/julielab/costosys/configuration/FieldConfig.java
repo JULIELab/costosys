@@ -15,33 +15,16 @@
 
 package de.julielab.costosys.configuration;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
-
+import com.ximpleware.*;
 import de.julielab.costosys.Constants;
+import de.julielab.xml.JulieXMLConstants;
+import de.julielab.xml.JulieXMLTools;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ximpleware.AutoPilot;
-import com.ximpleware.EOFException;
-import com.ximpleware.EncodingException;
-import com.ximpleware.EntityException;
-import com.ximpleware.NavException;
-import com.ximpleware.ParseException;
-import com.ximpleware.PilotException;
-import com.ximpleware.VTDException;
-import com.ximpleware.VTDGen;
-import com.ximpleware.VTDNav;
-import com.ximpleware.XPathEvalException;
-import com.ximpleware.XPathParseException;
-
-import de.julielab.xml.JulieXMLConstants;
-import de.julielab.xml.JulieXMLTools;
+import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * This class holds the definition of fields for the database table to work

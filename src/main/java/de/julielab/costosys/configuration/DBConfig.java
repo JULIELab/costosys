@@ -1,21 +1,9 @@
 package de.julielab.costosys.configuration;
 
-import java.io.IOException;
-
+import com.ximpleware.*;
 import org.apache.commons.lang3.StringUtils;
 
-import com.ximpleware.AutoPilot;
-import com.ximpleware.EOFException;
-import com.ximpleware.EncodingException;
-import com.ximpleware.EntityException;
-import com.ximpleware.NavException;
-import com.ximpleware.ParseException;
-import com.ximpleware.PilotException;
-import com.ximpleware.VTDException;
-import com.ximpleware.VTDGen;
-import com.ximpleware.VTDNav;
-import com.ximpleware.XPathEvalException;
-import com.ximpleware.XPathParseException;
+import java.io.IOException;
 
 public class DBConfig extends ConfigBase {
 

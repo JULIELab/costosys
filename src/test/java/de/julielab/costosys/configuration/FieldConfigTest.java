@@ -17,9 +17,11 @@
  * 
  */
 package de.julielab.costosys.configuration;
-import static de.julielab.costosys.configuration.FieldConfig.createField;
-import static org.assertj.core.api.Assertions.*;
-import static org.junit.Assert.assertEquals;
+
+import com.ximpleware.VTDException;
+import de.julielab.xml.JulieXMLConstants;
+import org.apache.commons.io.IOUtils;
+import org.junit.Test;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -29,12 +31,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.io.IOUtils;
-import org.junit.Test;
-
-import com.ximpleware.VTDException;
-
-import de.julielab.xml.JulieXMLConstants;
+import static de.julielab.costosys.configuration.FieldConfig.createField;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Test whether the XML table scheme definition is correctly parsed and represented.

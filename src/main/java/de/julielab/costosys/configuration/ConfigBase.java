@@ -1,17 +1,11 @@
 package de.julielab.costosys.configuration;
 
-import java.io.IOException;
-
+import com.ximpleware.*;
+import de.julielab.costosys.dbconnection.DataBaseConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ximpleware.AutoPilot;
-import com.ximpleware.VTDException;
-import com.ximpleware.VTDGen;
-import com.ximpleware.VTDNav;
-import com.ximpleware.XPathParseException;
-
-import de.julielab.costosys.dbconnection.DataBaseConnector;
+import java.io.IOException;
 
 
 

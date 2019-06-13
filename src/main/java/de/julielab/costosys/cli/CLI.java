@@ -16,6 +16,9 @@
 package de.julielab.costosys.cli;
 
 import de.julielab.costosys.Constants;
+import de.julielab.costosys.configuration.TableSchemaDoesNotExistException;
+import de.julielab.costosys.dbconnection.CoStoSysConnection;
+import de.julielab.costosys.dbconnection.DataBaseConnector;
 import de.julielab.costosys.dbconnection.SubsetStatus;
 import de.julielab.costosys.dbconnection.util.CoStoSysException;
 import de.julielab.costosys.dbconnection.util.CoStoSysRuntimeException;
@@ -23,9 +26,6 @@ import de.julielab.costosys.medline.ConfigurationConstants;
 import de.julielab.costosys.medline.Updater;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
-import de.julielab.costosys.configuration.TableSchemaDoesNotExistException;
-import de.julielab.costosys.dbconnection.CoStoSysConnection;
-import de.julielab.costosys.dbconnection.DataBaseConnector;
 import org.apache.commons.cli.*;
 import org.apache.commons.configuration2.XMLConfiguration;
 import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static de.julielab.costosys.dbconnection.DataBaseConnector.*;
+import static de.julielab.costosys.dbconnection.DataBaseConnector.StatusElement;
 import static de.julielab.costosys.dbconnection.DataBaseConnector.StatusElement.*;
 
 /**

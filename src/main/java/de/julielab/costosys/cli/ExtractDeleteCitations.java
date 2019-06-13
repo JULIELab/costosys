@@ -15,20 +15,15 @@
 
 package de.julielab.costosys.cli;
 
-import java.io.File;
-import java.io.FilenameFilter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
 import de.julielab.costosys.Constants;
+import de.julielab.xml.JulieXMLConstants;
+import de.julielab.xml.JulieXMLTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import de.julielab.xml.JulieXMLConstants;
-import de.julielab.xml.JulieXMLTools;
+import java.io.File;
+import java.io.FilenameFilter;
+import java.util.*;
 
 /**
  * Extracts PMIDs of deleted Medline documents from Medline Update XML batches.

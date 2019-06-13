@@ -1,19 +1,12 @@
 package de.julielab.costosys.configuration;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.HashMap;
-import java.util.Map;
-
+import de.julielab.costosys.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import de.julielab.costosys.Constants;
+import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * This class reads a hidden configuration file in the users home directory. If no such file exists, a new one can be
