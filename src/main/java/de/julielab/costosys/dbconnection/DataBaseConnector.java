@@ -942,7 +942,7 @@ public class DataBaseConnector {
     public void createTable(String tableName, String schemaName, String comment) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        ArrayList<String> columns = getTableCreationColumns(tableName, fieldConfig);
+        List<String> columns = getTableCreationColumns(tableName, fieldConfig);
 
         createTable(tableName, columns, comment);
 
@@ -979,7 +979,7 @@ public class DataBaseConnector {
     public void createTable(String tableName, String referenceTableName, String schemaName, String comment) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        ArrayList<String> columns = getTableCreationColumns(tableName, fieldConfig);
+        List<String> columns = getTableCreationColumns(tableName, fieldConfig);
         columns.add(String.format("CONSTRAINT %s_fkey FOREIGN KEY (%s) REFERENCES %s ON DELETE CASCADE",
                 tableName.replace(".", ""), fieldConfig.getPrimaryKeyString(), referenceTableName));
 
@@ -995,6 +995,133 @@ public class DataBaseConnector {
     }
 
     /**
+     * <p>Checks if the given columns exist with the given data type. If not, the missing columns are appended to the table.</p>
+     *
+     * @param tableName
+     * @param columnsNames
+     * @param columnDataType
+     */
+    public void assureColumnsExist(String tableName, List<String> columnsNames, String columnDataType) {
+        try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+            costoConn.setAutoCommit(false);
+            Map<String, String> foundColumnNames = new HashMap<>();
+            List<String> missingColumns = new ArrayList<>();
+            final List<Map<String, Object>> infos = getTableColumnInformation(tableName, "column_name", "data_type");
+            for (Map<String, Object> info : infos) {
+                foundColumnNames.put((String) info.get("column_name"), (String) info.get("data_type"));
+            }
+            boolean error = false;
+            for (int i = 0; i < columnsNames.size(); i++) {
+                String columnName = columnsNames.get(i);
+                if (foundColumnNames.containsKey(columnName) && !columnDataType.equals(foundColumnNames.get(columnName))) {
+                    LOG.error("In table {}, the column {} exists with data type {} but should be assured to exist with datatype {}.", tableName, columnName, foundColumnNames.get(columnName), columnDataType);
+                    error = true;
+                } else if (!foundColumnNames.containsKey(columnName))
+                    missingColumns.add(columnName);
+            }
+            if (error)
+                throw new CoStoSysRuntimeException("There was a divergence between desired and already existing column data typed in table " + tableName + ". Aborting.");
+            final Statement stmt = costoConn.createStatement();
+            for (String missingColumn : missingColumns) {
+                final String sql = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, missingColumn, columnDataType);
+                stmt.execute(sql);
+            }
+            costoConn.commit();
+            costoConn.setAutoCommit(true);
+        } catch (SQLException e) {
+            LOG.error("SQLException while trying to add columns to table {}", tableName, e);
+            if (e.getNextException() != null)
+                LOG.error("The next exception is", e);
+            throw new CoStoSysSQLRuntimeException(e);
+        }
+    }
+
+    /**
+     * <p>Returns information about the columns in a table. The most simple usage of this method would be to retrieve the names of all columns of a table, for example.</p>
+     * Possible column information fields:
+     * <ul>
+     * <li>table_catalog</li>
+     * <li>table_schema</li>
+     * <li>table_name</li>
+     * <li>column_name</li>
+     * <li>ordinal_position</li>
+     * <li>column_default</li>
+     * <li>is_nullable</li>
+     * <li>data_type</li>
+     * <li>character_maximum_length</li>
+     * <li>character_octet_length</li>
+     * <li>numeric_precision</li>
+     * <li>numeric_precision_radix</li>
+     * <li>numeric_scale</li>
+     * <li>datetime_precision</li>
+     * <li>interval_type</li>
+     * <li>interval_precision</li>
+     * <li>character_set_catalog</li>
+     * <li>character_set_schema</li>
+     * <li>character_set_name</li>
+     * <li>collation_catalog</li>
+     * <li>collation_schema</li>
+     * <li>collation_name</li>
+     * <li>domain_catalog</li>
+     * <li>domain_schema</li>
+     * <li>domain_name</li>
+     * <li>udt_catalog</li>
+     * <li>udt_schema</li>
+     * <li>udt_name</li>
+     * <li>scope_catalog</li>
+     * <li>scope_schema</li>
+     * <li>scope_name</li>
+     * <li>maximum_cardinality</li>
+     * <li>dtd_identifier</li>
+     * <li>is_self_referencing</li>
+     * <li>is_identity</li>
+     * <li>identity_generation</li>
+     * <li>identity_start</li>
+     * <li>identity_increment</li>
+     * <li>identity_maximum</li>
+     * <li>identity_minimum</li>
+     * <li>identity_cycle</li>
+     * <li>is_generated</li>
+     * <li>generation_expression</li>
+     * <li>is_updatable</li>
+     * </ul>
+     *
+     * @param qualifiedTable
+     * @param fields         The column meta information fields to return. Will be all if this parameter is omitted.
+     * @return
+     */
+    public List<Map<String, Object>> getTableColumnInformation(String qualifiedTable, String... fields) {
+        String schema = getActivePGSchema();
+        String tableName;
+        if (qualifiedTable.contains(".")) {
+            final String[] split = qualifiedTable.split("\\.");
+            schema = split[0];
+            tableName = split[1];
+        } else {
+            tableName = qualifiedTable;
+        }
+        try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+            String queriedFields = fields != null && fields.length > 0 ? Stream.of(fields).collect(Collectors.joining(",")) : "*";
+            // Lowercasing because postgres is lowercasing all table names
+            String sql = String.format("SELECT %s FROM information_schema.columns WHERE table_schema = '%s' AND table_name = '%s'", queriedFields, schema, tableName.toLowerCase());
+            final ResultSet rs = costoConn.createStatement().executeQuery(sql);
+            List<Map<String, Object>> metaInformation = new ArrayList<>();
+            final int columnCount = rs.getMetaData().getColumnCount();
+            while (rs.next()) {
+                Map<String, Object> columnInfo = new HashMap<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    columnInfo.put(rs.getMetaData().getColumnName(i), rs.getObject(i));
+                }
+                metaInformation.add(columnInfo);
+            }
+            return metaInformation;
+        } catch (SQLException e) {
+            LOG.error("Could not retrieve column meta information for table {} and meta fields to retrieve {}", qualifiedTable, fields, e);
+            throw new CoStoSysSQLRuntimeException(e);
+        }
+    }
+
+    /**
      * Creates the columns to create a table according to the table schema given by
      * <tt>fieldConfig</tt> for use with {@link #createTable(String, List, String)}.
      *
@@ -1002,8 +1129,8 @@ public class DataBaseConnector {
      * @param fieldConfig
      * @return
      */
-    private ArrayList<String> getTableCreationColumns(String tableName, FieldConfig fieldConfig) {
-        ArrayList<String> columns = new ArrayList<String>();
+    private List<String> getTableCreationColumns(String tableName, FieldConfig fieldConfig) {
+        List<String> columns = new ArrayList<String>();
         for (Map<String, String> field : fieldConfig.getFields()) {
             StringBuilder columnStrBuilder = new StringBuilder();
             columnStrBuilder.append(field.get(JulieXMLConstants.NAME));
@@ -2911,7 +3038,7 @@ public class DataBaseConnector {
         if (!withConnectionQueryBoolean(c -> c.tableExists(tableName)))
             throw new IllegalArgumentException("Table \"" + tableName + "\" does not exist.");
 
-        if (tablesToJoin != null && schemaNames.length != tablesToJoin.length+1)
+        if (tablesToJoin != null && schemaNames.length != tablesToJoin.length + 1)
             throw new IllegalArgumentException("There are " + schemaNames.length + " table schema names given but " + tablesToJoin.length + " tables are requested.");
 
         FieldConfig fieldConfig = fieldConfigs.get(schemaNames[0]);
@@ -3689,6 +3816,10 @@ public class DataBaseConnector {
     }
 
     public synchronized FieldConfig addPKAdaptedFieldConfiguration(List<Map<String, String>> primaryKey, String fieldConfigurationForAdaption, String fieldConfigurationNameSuffix) {
+        return addPKAdaptedFieldConfiguration(primaryKey, fieldConfigurationForAdaption, fieldConfigurationNameSuffix, Collections.emptyList());
+    }
+
+    public synchronized FieldConfig addPKAdaptedFieldConfiguration(List<Map<String, String>> primaryKey, String fieldConfigurationForAdaption, String fieldConfigurationNameSuffix, List<Map<String, String>> additionalColumns) {
         List<String> pkNames = primaryKey.stream().map(map -> map.get(JulieXMLConstants.NAME)).collect(Collectors.toList());
         String fieldConfigName = StringUtils.join(pkNames, "-") + fieldConfigurationNameSuffix;
         FieldConfig ret;
@@ -3701,6 +3832,7 @@ public class DataBaseConnector {
                     filter(i -> !xmiConfigPkIndices.contains(i)).
                     mapToObj(i -> xmiConfig.getFields().get(i)).
                     forEach(fields::add);
+            additionalColumns.forEach(fields::add);
             ret = new FieldConfig(fields, "", fieldConfigName);
             fieldConfigs.put(ret.getName(), ret);
         } else {
@@ -3727,9 +3859,9 @@ public class DataBaseConnector {
      * @param doGzip     Whether the XMI data should be gzipped in the table.
      * @return The created field configuration.
      */
-    public synchronized FieldConfig addXmiTextFieldConfiguration(List<Map<String, String>> primaryKey, boolean doGzip) {
+    public synchronized FieldConfig addXmiTextFieldConfiguration(List<Map<String, String>> primaryKey, List<Map<String, String>> additionalColumns, boolean doGzip) {
         String referenceSchema = doGzip ? "xmi_text_gzip" : "xmi_text";
-        return addPKAdaptedFieldConfiguration(primaryKey, referenceSchema, "-xmi-text-autogenerated");
+        return addPKAdaptedFieldConfiguration(primaryKey, referenceSchema, "-xmi-text-autogenerated", additionalColumns);
     }
 
     /**
@@ -3738,13 +3870,14 @@ public class DataBaseConnector {
      * <code>xmi</code> and will store the actual XMI annotation data. This table schema
      * is used for the storage of XMI annotation graph segments. Those segments will then correspond to
      * UIMA annotation types that are stored in tables of their own. A table schema to store the base document
-     * is created by {@link #addXmiTextFieldConfiguration(List, boolean)}.
+     * is created by {@link #addXmiTextFieldConfiguration(List, List, boolean)}.
      * This method is used by the Jena Document Information
      * System (JeDIS) components jcore-xmi-db-reader and jcore-xmi-db-consumer.
      *
      * @param primaryKey The document primary key for which an base document XMI segmentation table schema should be created.
      * @param doGzip     Whether the XMI data should be gzipped in the table.
      * @return The created field configuration.
+     * @deprecated JeDIS does not store annotations in columns to the primary document table.
      */
     public synchronized FieldConfig addXmiAnnotationFieldConfiguration(List<Map<String, String>> primaryKey, boolean doGzip) {
         List<String> pkNames = primaryKey.stream().map(map -> map.get(JulieXMLConstants.NAME)).collect(Collectors.toList());

@@ -175,5 +175,52 @@ public class DataBaseConnectorTest {
         assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
     }
 
+    @Test
+    public void testGetColumnMetaInformation() {
+        final Map<String, String> f1 = FieldConfig.createField(JulieXMLConstants.NAME, "testfield1", JulieXMLConstants.TYPE, "xml");
+        final Map<String, String> f2 = FieldConfig.createField(JulieXMLConstants.NAME, "testfield2", JulieXMLConstants.TYPE, "bytea");
+        final FieldConfig config = dbc.addXmiTextFieldConfiguration(dbc.getFieldConfiguration("xmi_text").getPrimaryKeyFields().collect(Collectors.toList()), Arrays.asList(f1, f2), false);
+        final List<Map<String, String>> configFields = config.getFields();
+        assertEquals(configFields.get(configFields.size() - 2).get(JulieXMLConstants.NAME), "testfield1");
+        assertEquals(configFields.get(configFields.size() - 1).get(JulieXMLConstants.NAME), "testfield2");
+
+        dbc.createTable("MyCustomTable",config.getName(), "Created with a custom field configuration.");
+        assertThat(dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("MyCustomTable"))).isTrue();
+        assertThat(dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mycustomtable"))).isTrue();
+
+        final List<Map<String, Object>> columnInfo = dbc.getTableColumnInformation("MyCustomTable", "column_name", "data_type");
+        int colsFound = 0;
+        for (Map<String, Object> info : columnInfo) {
+            if (info.get("column_name").equals("testfield1")) {
+                assertThat(info.get("data_type")).isEqualTo("xml");
+                ++colsFound;
+            } else if (info.get("column_name").equals("testfield2")) {
+                assertThat(info.get("data_type")).isEqualTo("bytea");
+                ++colsFound;
+            }
+        }
+        assertThat(colsFound).isEqualTo(2);
+    }
+
+    @Test
+    public void testAssureColumnsExist() throws Exception {
+        dbc.createTable("MyColumnExtensionTable", "medline2017");
+        dbc.assureColumnsExist("MyColumnExtensionTable", Arrays.asList("newCol1", "newCol2"), "xml");
+
+        final List<Map<String, Object>> infos = dbc.getTableColumnInformation("MyColumnExtensionTable", "column_name", "data_type");
+        int colsFound = 0;
+        for (Map<String, Object> info : infos) {
+            if (info.get("column_name").equals("newcol1")) {
+                assertThat(info.get("data_type")).isEqualTo("xml");
+                ++colsFound;
+            } else if (info.get("column_name").equals("newcol2")) {
+                assertThat(info.get("data_type")).isEqualTo("xml");
+                ++colsFound;
+            }
+        }
+        assertThat(colsFound).isEqualTo(2);
+    }
+
+
 
 }
