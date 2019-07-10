@@ -1543,7 +1543,6 @@ public class DataBaseConnector {
      * @return true if the table has entries, false otherwise
      */
     public boolean isEmpty(String tableName) {
-
         String sqlStr = "SELECT * FROM " + tableName + " LIMIT 1";
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement st = conn.createStatement();
@@ -1551,9 +1550,20 @@ public class DataBaseConnector {
 
             return !res.next();
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new CoStoSysSQLRuntimeException(e);
         }
-        return false;
+    }
+
+    public boolean isEmpty(String tableName, String columnName) {
+        String sqlStr = "SELECT "+columnName+" FROM " + tableName + " LIMIT 1";
+        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+            Statement st = conn.createStatement();
+            ResultSet res = st.executeQuery(sqlStr);
+
+            return !res.next();
+        } catch (SQLException e) {
+            throw new CoStoSysSQLRuntimeException(e);
+        }
     }
 
     /**
