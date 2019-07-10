@@ -3744,6 +3744,23 @@ public class DataBaseConnector {
         return pkIndices;
     }
 
+    /**
+     * <p>Checks if the given table has at least the columns defined in the given schema. An exception is raised if this is not the case.</p>
+     * @param tableName The table to check.
+     * @param schema The table schema to check against.
+     * @throws TableSchemaMismatchException If the table misses at least one column defined in the given table schema.
+     */
+    public void checkTableHasSchemaColumns(String tableName, String schema) throws TableSchemaMismatchException, TableNotFoundException {
+        if (!tableExists(tableName))
+            throw new TableNotFoundException("Table '" + tableName + "' does not exist.");
+        final FieldConfig fieldConfig = getFieldConfiguration(schema);
+        final Set<String> columnNames = getTableColumnNames(tableName).collect(Collectors.toSet());
+        List<String> missingColumns = Stream.of(fieldConfig.getColumns()).filter(col -> !columnNames.contains(col)).collect(Collectors.toList());
+
+        if (!missingColumns.isEmpty())
+            throw new TableSchemaMismatchException("The table '" + tableName + "' does not exhibit the expected columns. Expected columns: " + Arrays.asList(fieldConfig.getColumns()) + "; found columns: " + columnNames + "; missing:" + missingColumns);
+    }
+
     public void checkTableSchemaCompatibility(String referenceSchema, String[] schemaNames) throws TableSchemaMismatchException {
         String[] schemas = new String[schemaNames.length + 1];
         schemas[0] = referenceSchema;
