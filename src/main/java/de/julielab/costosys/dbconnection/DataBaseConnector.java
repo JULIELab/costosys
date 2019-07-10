@@ -1555,7 +1555,7 @@ public class DataBaseConnector {
     }
 
     public boolean isEmpty(String tableName, String columnName) {
-        String sqlStr = "SELECT "+columnName+" FROM " + tableName + " LIMIT 1";
+        String sqlStr = "SELECT " + columnName + " FROM " + tableName + " LIMIT 1";
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement st = conn.createStatement();
             ResultSet res = st.executeQuery(sqlStr);
@@ -3746,8 +3746,9 @@ public class DataBaseConnector {
 
     /**
      * <p>Checks if the given table has at least the columns defined in the given schema. An exception is raised if this is not the case.</p>
+     *
      * @param tableName The table to check.
-     * @param schema The table schema to check against.
+     * @param schema    The table schema to check against.
      * @throws TableSchemaMismatchException If the table misses at least one column defined in the given table schema.
      */
     public void checkTableHasSchemaColumns(String tableName, String schema) throws TableSchemaMismatchException, TableNotFoundException {
@@ -4176,9 +4177,9 @@ public class DataBaseConnector {
     }
 
     public void withConnectionExecute(DbcExecution command) {
-        boolean close = false;
-        try (CoStoSysConnection ignored = obtainOrReserveConnection()) {
+        try (CoStoSysConnection coStoSysConnection = obtainOrReserveConnection()) {
             try {
+                coStoSysConnection.setAutoCommit(true);
                 command.execute(this);
             } catch (Throwable throwable) {
                 LOG.error("Could not execute SQL", throwable);
