@@ -1121,6 +1121,11 @@ public class DataBaseConnector {
         }
     }
 
+    public Stream<String> getTableColumnNames(String qualifiedTable) {
+        final List<Map<String, Object>> infos = getTableColumnInformation(qualifiedTable, "column_name");
+        return infos.stream().map(info -> info.get("column_name")).map(String.class::cast);
+    }
+
     /**
      * Creates the columns to create a table according to the table schema given by
      * <tt>fieldConfig</tt> for use with {@link #createTable(String, List, String)}.

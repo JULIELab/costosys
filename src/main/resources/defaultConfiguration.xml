@@ -17,11 +17,24 @@
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
 					retrieve="true" gzip="true"/>
 			</tableSchema>
+			<tableSchema name="medline_2017_nozip"
+						 forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
+					   retrieve="true"/>
+			</tableSchema>
 			<tableSchema name="medline_2016" forEach="/MedlineCitationSet/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
 					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
 					retrieve="true" gzip="true"/>
+			</tableSchema>
+			<tableSchema name="medline_2016_nozip" forEach="/MedlineCitationSet/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
+					   retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="pubmed_gzip"
 				forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
@@ -29,6 +42,13 @@
 					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
 					retrieve="true" gzip="true"/>
+			</tableSchema>
+			<tableSchema name="pubmed"
+						 forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
+				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xml" type="xml" xpath="." returnXMLFragment="true"
+					   retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_complete_cas" forEach=".">
 				<field name="docid" type="text" primaryKey="true"  retrieve="true"/>
@@ -40,15 +60,30 @@
 			</tableSchema>
 			<tableSchema name="xmi_text" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
+			</tableSchema>
+			<tableSchema name="xmi_text_gzip" forEach=".">
+				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="bytea" 	retrieve="true" gzip="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
+			</tableSchema>
+			<!-- This was the schema used when the base document and its annotations went in different tables-->
+			<tableSchema name="xmi_text_legacy" forEach=".">
+				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
 				<field name="xmi" type="xml" retrieve="true"/>
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
 			</tableSchema>
+			<!-- This was the schema used when the base document and its annotations went in different tables-->
 			<tableSchema name="xmi_annotation" forEach=".">
 				<field name="docid" type="xml" primaryKey="true" retrieve="false"/>
 				<field name="xmi" type="xml" retrieve="true"/>
 			</tableSchema>
-			<tableSchema name="xmi_text_gzip" forEach=".">
+			<!-- This was the schema used when the base document and its annotations went in different tables-->
+			<tableSchema name="xmi_text_gzip_legacy" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
 				<field name="xmi" type="bytea" 	retrieve="true" gzip="true"/>
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>

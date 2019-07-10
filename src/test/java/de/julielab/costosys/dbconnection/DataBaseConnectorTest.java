@@ -5,6 +5,7 @@ import de.julielab.costosys.cli.TableNotFoundException;
 import de.julielab.costosys.configuration.FieldConfig;
 import de.julielab.costosys.dbconnection.util.TableSchemaMismatchException;
 import de.julielab.xml.JulieXMLConstants;
+import org.postgresql.jdbc.PgSQLXML;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -96,7 +97,7 @@ public class DataBaseConnectorTest {
             dbc.createTable("additionalTable2", "Another test table for tests with joining to other tables.");
             for (int i = 0; i < pksInTable.size(); i++) {
                 Object[] pk = pksInTable.get(i);
-                String sql = String.format("INSERT INTO %s VALUES('%s','%s')", "additionalTable2", pk[0], "Value" + (i+42));
+                String sql = String.format("INSERT INTO %s VALUES('%s','%s')", "additionalTable2", pk[0], "Value" + (i + 42));
                 stmt.execute(sql);
             }
             costoConn.commit();
@@ -109,7 +110,7 @@ public class DataBaseConnectorTest {
             assertThat(new String(joinedData[0], StandardCharsets.UTF_8).matches("[0-9]+"));
             assertThat(new String(joinedData[1], StandardCharsets.UTF_8)).startsWith("<MedlineCitation");
             assertThat(new String(joinedData[2], StandardCharsets.UTF_8)).isEqualTo("Value" + i);
-            assertThat(new String(joinedData[3], StandardCharsets.UTF_8)).isEqualTo("Value" + (i+++42));
+            assertThat(new String(joinedData[3], StandardCharsets.UTF_8)).isEqualTo("Value" + (i++ + 42));
         }
     }
 
@@ -161,15 +162,15 @@ public class DataBaseConnectorTest {
 
     @Test
     public void testXmlData() throws UnsupportedEncodingException {
-        dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text", "XML Test Table"));
+        dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text_legacy", "XML Test Table"));
         Map<String, Object> row = new HashMap<>();
         row.put("docid", "doc1");
         row.put("xmi", "some nonsense");
         dbc.reserveConnection();
-        assertThatCode(() -> dbc.importFromRowIterator(Arrays.asList(row).iterator(), "myxmltest", "xmi_text")).doesNotThrowAnyException();
+        assertThatCode(() -> dbc.importFromRowIterator(Arrays.asList(row).iterator(), "myxmltest", "xmi_text_legacy")).doesNotThrowAnyException();
         dbc.releaseConnections();
         // Iterators use their own connection
-        DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, null, "xmi_text");
+        DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, null, "xmi_text_legacy");
         byte[][] next = dbcIterator.next();
         assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
         assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
@@ -179,12 +180,12 @@ public class DataBaseConnectorTest {
     public void testGetColumnMetaInformation() {
         final Map<String, String> f1 = FieldConfig.createField(JulieXMLConstants.NAME, "testfield1", JulieXMLConstants.TYPE, "xml");
         final Map<String, String> f2 = FieldConfig.createField(JulieXMLConstants.NAME, "testfield2", JulieXMLConstants.TYPE, "bytea");
-        final FieldConfig config = dbc.addXmiTextFieldConfiguration(dbc.getFieldConfiguration("xmi_text").getPrimaryKeyFields().collect(Collectors.toList()), Arrays.asList(f1, f2), false);
+        final FieldConfig config = dbc.addXmiTextFieldConfiguration(dbc.getFieldConfiguration("xmi_text_legacy").getPrimaryKeyFields().collect(Collectors.toList()), Arrays.asList(f1, f2), false);
         final List<Map<String, String>> configFields = config.getFields();
         assertEquals(configFields.get(configFields.size() - 2).get(JulieXMLConstants.NAME), "testfield1");
         assertEquals(configFields.get(configFields.size() - 1).get(JulieXMLConstants.NAME), "testfield2");
 
-        dbc.createTable("MyCustomTable",config.getName(), "Created with a custom field configuration.");
+        dbc.createTable("MyCustomTable", config.getName(), "Created with a custom field configuration.");
         assertThat(dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("MyCustomTable"))).isTrue();
         assertThat(dbc.withConnectionQueryBoolean(dbc -> dbc.tableExists("mycustomtable"))).isTrue();
 
@@ -204,7 +205,7 @@ public class DataBaseConnectorTest {
 
     @Test
     public void testAssureColumnsExist() throws Exception {
-        dbc.createTable("MyColumnExtensionTable", "medline2017");
+        dbc.createTable("MyColumnExtensionTable", "medline_2017");
         dbc.assureColumnsExist("MyColumnExtensionTable", Arrays.asList("newCol1", "newCol2"), "xml");
 
         final List<Map<String, Object>> infos = dbc.getTableColumnInformation("MyColumnExtensionTable", "column_name", "data_type");
@@ -221,6 +222,50 @@ public class DataBaseConnectorTest {
         assertThat(colsFound).isEqualTo(2);
     }
 
+    @Test
+    public void testUpdateToNullValue() throws Exception {
+        dbc.setActiveTableSchema("pubmed");
+        dbc.createTable("TableWithNull", "for tests with null values");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        Map<String, Object> row = new HashMap<>();
+        row.put("pmid", "1234");
+        row.put("xml", "<xmi>content1</xmi>");
+        rows.add(row);
+        row = new HashMap<>();
+        row.put("pmid", "5678");
+        row.put("xml", "<xmi>content2</xmi>");
+        rows.add(row);
 
+        dbc.importFromRowIterator(rows.iterator(), "TableWithNull", true, "pubmed");
+
+        DBCIterator<Object[]> dbcIterator = dbc.query("TableWithNull", Arrays.asList("pmid", "xml"));
+        List<String> ids = new ArrayList<>();
+        List<String> xml = new ArrayList<>();
+        while (dbcIterator.hasNext()) {
+            Object[] next = dbcIterator.next();
+            ids.add((String) next[0]);
+            xml.add(((PgSQLXML) next[1]).getString());
+        }
+        assertThat(ids).containsExactly("1234", "5678");
+        assertThat(xml).containsExactly("<xmi>content1</xmi>", "<xmi>content2</xmi>");
+
+        rows.clear();
+        row = new HashMap<>();
+        row.put("pmid", "5678");
+        row.put("xml", null);
+        rows.add(row);
+
+        dbc.updateFromRowIterator(rows.iterator(), "TableWithNull", true, "pubmed");
+        dbcIterator = dbc.query("TableWithNull", Arrays.asList("pmid", "xml"));
+        ids = new ArrayList<>();
+        xml = new ArrayList<>();
+        while (dbcIterator.hasNext()) {
+            Object[] next = dbcIterator.next();
+            ids.add((String) next[0]);
+            xml.add(next[1] != null ? ((PgSQLXML) next[1]).getString() : (String) next[1]);
+        }
+        assertThat(ids).containsExactly("1234", "5678");
+        assertThat(xml).containsExactly("<xmi>content1</xmi>",null);
+    }
 
 }
