@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.testng.Assert.assertTrue;
 import static org.testng.AssertJUnit.assertEquals;
 
 public class DataBaseConnectorTest {
@@ -266,6 +267,12 @@ public class DataBaseConnectorTest {
         }
         assertThat(ids).containsExactly("1234", "5678");
         assertThat(xml).containsExactly("<xmi>content1</xmi>",null);
+    }
+
+    @Test
+    public void testColumnEmpty() {
+        dbc.createTable("EmptyTable", "medline_2017","Just an empty table");
+        assertTrue(dbc.isEmpty("EmptyTable", "xml"));
     }
 
 }

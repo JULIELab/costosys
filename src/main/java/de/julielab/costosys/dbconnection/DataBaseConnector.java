@@ -1555,7 +1555,7 @@ public class DataBaseConnector {
     }
 
     public boolean isEmpty(String tableName, String columnName) {
-        String sqlStr = "SELECT " + columnName + " FROM " + tableName + " LIMIT 1 WHERE " + columnName + " IS NOT NULL";
+        String sqlStr = "SELECT " + columnName + " FROM " + tableName + " WHERE " + columnName + " IS NOT NULL LIMIT 1";
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             Statement st = conn.createStatement();
             ResultSet res = st.executeQuery(sqlStr);
