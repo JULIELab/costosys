@@ -1,6 +1,7 @@
 package de.julielab.costosys.dbconnection;
 
 import de.julielab.costosys.Constants;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -15,13 +16,12 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 
 public class ThreadedColumnsToRetrieveIteratorTest {
-    private final static Logger log = LoggerFactory.getLogger(ThreadedColumnsToRetrieveIteratorTest.class);
     @ClassRule
     public static PostgreSQLContainer postgres = (PostgreSQLContainer) new PostgreSQLContainer();
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setUp() throws SQLException, IOException {
+    public static void setUp() throws SQLException {
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
         dbc.reserveConnection();
@@ -32,8 +32,13 @@ public class ThreadedColumnsToRetrieveIteratorTest {
         dbc.releaseConnections();
     }
 
+    @AfterClass
+    public static void shutDown() {
+        dbc.close();
+    }
+
     @Test
-    public void testIterator() throws Exception {
+    public void testIterator() {
         try (CoStoSysConnection conn = dbc.reserveConnection()) {
             de.julielab.costosys.dbconnection.ThreadedColumnsToRetrieveIterator it = new de.julielab.costosys.dbconnection.ThreadedColumnsToRetrieveIterator(dbc, conn, Arrays.<Object[]>asList(new Object[]{"10922238"}), Constants.DEFAULT_DATA_TABLE_NAME, "medline_2016");
             int numRetrieved = 0;
@@ -47,7 +52,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
     }
 
     @Test
-    public void testIteratorWithoutExternalConnection() throws Exception {
+    public void testIteratorWithoutExternalConnection() {
         de.julielab.costosys.dbconnection.ThreadedColumnsToRetrieveIterator it = new ThreadedColumnsToRetrieveIterator(dbc, null, Arrays.<Object[]>asList(new Object[]{"10922238"}), Constants.DEFAULT_DATA_TABLE_NAME, "medline_2016");
         int numRetrieved = 0;
         while (it.hasNext()) {

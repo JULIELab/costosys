@@ -327,7 +327,7 @@ public class DataBaseConnector {
 
         Connection conn = null;
         synchronized (DataBaseConnector.class) {
-            if (null == dataSource || ((HikariDataSource) dataSource).isClosed()) {
+            if (null == dataSource || dataSource.isClosed()) {
                 LOG.debug("Setting up connection pool data source");
                 HikariConfig hikariConfig = new HikariConfig();
                 hikariConfig.setPoolName("costosys-" + System.nanoTime());
@@ -2364,15 +2364,15 @@ public class DataBaseConnector {
         String dataImportStmtString = constructImportStatementString(tableName, fieldConfig);
         String mirrorUpdateStmtString = constructMirrorInsertStatementString(fieldConfig);
 
-        boolean wasAutoCommit = true;
+        boolean wasAutoCommit;
 
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             wasAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
             // Get the list of mirror subsets in which all new primary keys must
             // be inserted as well.
             LinkedHashMap<String, Boolean> mirrorNames = getMirrorSubsetNames(conn, tableName);
 
-            conn.setAutoCommit(false);
             PreparedStatement psDataImport = conn.prepareStatement(dataImportStmtString);
 
             List<PreparedStatement> mirrorStatements = null;
@@ -2497,9 +2497,10 @@ public class DataBaseConnector {
         String mirrorInsertStmtString = constructMirrorInsertStatementString(fieldConfig);
 
         // this is just a default value in case the next line throws an exception
-        boolean wasAutoCommit = true;
+        boolean wasAutoCommit;
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             wasAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
             LOG.trace("Retrieving mirror subsets of table {}", tableName);
             LinkedHashMap<String, Boolean> mirrorNames = getMirrorSubsetNames(conn, tableName);
 
@@ -2545,15 +2546,17 @@ public class DataBaseConnector {
                     // the resulting PS in the psMap
                     PreparedStatement ps = constructUpdateStatementFromRow(psMap, tableName, row, fieldConfig, conn);
 
+                    int psIndex = 1;
                     for (int j = 0; j < fields.size() + primaryKey.length; j++) {
                         if (j < fields.size()) {
                             Map<String, String> field = fields.get(j);
                             String fieldName = field.get(JulieXMLConstants.NAME);
-                            setPreparedStatementParameterWithType(j + 1, ps, row.get(fieldName), null, null);
+                            if (row.containsKey(fieldName))
+                                setPreparedStatementParameterWithType(psIndex++, ps, row.get(fieldName), null, null);
                         } else {
                             String key = primaryKey[j - fields.size()];
                             Object keyValue = row.get(key);
-                            setPreparedStatementParameterWithType(j + 1, ps, keyValue, null, null);
+                            setPreparedStatementParameterWithType(psIndex++, ps, keyValue, null, null);
                         }
                     }
                     ps.addBatch();
@@ -3890,6 +3893,9 @@ public class DataBaseConnector {
                 LOG.debug("Data source does not have active connections, closing it.");
                 dataSource.close();
             }
+        } else {
+            LOG.debug("Closing data source");
+            dataSource.close();
         }
     }
 
@@ -4157,6 +4163,7 @@ public class DataBaseConnector {
         }
         if (list.size() == dbConfig.getMaxConnections())
             LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
+        System.out.println(Arrays.toString(currentThread.getStackTrace()));
         Connection conn = getConn();
         CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, true);
         list.add(costoConn);

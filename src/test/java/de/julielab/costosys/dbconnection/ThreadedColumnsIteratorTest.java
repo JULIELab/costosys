@@ -1,6 +1,7 @@
 package de.julielab.costosys.dbconnection;
 
 import de.julielab.costosys.Constants;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -15,13 +16,12 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 
 public class ThreadedColumnsIteratorTest {
-    private final static Logger log = LoggerFactory.getLogger(ThreadedColumnsIteratorTest.class);
     @ClassRule
     public static PostgreSQLContainer postgres = (PostgreSQLContainer) new PostgreSQLContainer();
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
     @BeforeClass
-    public static void setUp() throws SQLException, IOException {
+    public static void setUp() throws SQLException {
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
         dbc.reserveConnection();
@@ -32,8 +32,13 @@ public class ThreadedColumnsIteratorTest {
         dbc.releaseConnections();
     }
 
+    @AfterClass
+    public static void shutDown() {
+        dbc.close();
+    }
+
     @Test
-    public void testIterator() throws SQLException {
+    public void testIterator() {
         try (CoStoSysConnection conn = dbc.reserveConnection()) {
             de.julielab.costosys.dbconnection.ThreadedColumnsIterator it = new de.julielab.costosys.dbconnection.ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
             int numRetrieved = 0;
@@ -80,7 +85,7 @@ public class ThreadedColumnsIteratorTest {
     }
 
     @Test
-    public void testIteratorWithLimit() throws SQLException {
+    public void testIteratorWithLimit() {
         try (CoStoSysConnection conn = dbc.reserveConnection()) {
             de.julielab.costosys.dbconnection.ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
             int numRetrieved = 0;
