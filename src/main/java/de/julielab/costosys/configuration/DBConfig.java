@@ -26,24 +26,20 @@ public class DBConfig extends ConfigBase {
     private String activeDataPGSchema;
 
     public DBConfig(byte[] configData) throws VTDException {
-        try {
-            // Convert the schema name to lower case as Postgres does so.
-            activePGSchema = getActiveConfig(configData, XPATH_CONF_ACTIVE_PG_SCHEMA).toLowerCase();
-            activeDataPGSchema = getActiveConfig(configData, XPATH_CONF_ACTIVE_DATA_PG_SCHEMA).toLowerCase();
-            activeDatabase = getActiveConfig(configData, XPATH_CONF_ACTIVE_DB_NAME);
-            buildDatabaseValues(activeDatabase, configData);
+        // Convert the schema name to lower case as Postgres does so.
+        activePGSchema = getActiveConfig(configData, XPATH_CONF_ACTIVE_PG_SCHEMA).toLowerCase();
+        activeDataPGSchema = getActiveConfig(configData, XPATH_CONF_ACTIVE_DATA_PG_SCHEMA).toLowerCase();
+        activeDatabase = getActiveConfig(configData, XPATH_CONF_ACTIVE_DB_NAME);
+        buildDatabaseValues(activeDatabase, configData);
 
-            VTDGen vg = new VTDGen();
-            vg.setDoc(configData);
-            vg.parse(true);
-            VTDNav vn = vg.getNav();
-            AutoPilot ap = new AutoPilot(vn);
-            String maxConnString = stringFromXpath(ap, XPATH_CONF_MAX_CON);
-            if (!StringUtils.isBlank(maxConnString))
-                maxConnections = Integer.parseInt(maxConnString);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        VTDGen vg = new VTDGen();
+        vg.setDoc(configData);
+        vg.parse(true);
+        VTDNav vn = vg.getNav();
+        AutoPilot ap = new AutoPilot(vn);
+        String maxConnString = stringFromXpath(ap, XPATH_CONF_MAX_CON);
+        if (!StringUtils.isBlank(maxConnString))
+            maxConnections = Integer.parseInt(maxConnString);
     }
 
     private void buildDatabaseValues(String activeDatabase, byte[] mergedConfData)

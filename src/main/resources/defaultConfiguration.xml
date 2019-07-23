@@ -60,15 +60,15 @@
 			</tableSchema>
 			<tableSchema name="xmi_text" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="base_document" type="xml" retrieve="true"/>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_text_gzip" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="base_document" type="bytea" 	retrieve="true" gzip="true"/>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
+				<field name="base_document" type="bytea" 	retrieve="true" gzip="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
 			<!-- This was the schema used when the base document and its annotations went in different tables-->
 			<tableSchema name="xmi_text_legacy" forEach=".">

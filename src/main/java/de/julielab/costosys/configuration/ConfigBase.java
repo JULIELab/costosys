@@ -10,73 +10,6 @@ import java.io.IOException;
 
 
 public abstract class ConfigBase {
-	protected static final Logger LOG = LoggerFactory.getLogger(DataBaseConnector.class);
-	/**
-	 * Inserts the user schemes into the default configuration. This makes all
-	 * data available in one place, which is useful for referencing default
-	 * values from within a user configuration.
-	 * 
-	 * @param defaultConfData
-	 *            - prepared default configuration file
-	 * @param userConfData
-	 *            - prepared user specific configuration file
-	 * @param xpath
-	 *            - path to the part to merge
-	 * @return - the merged configuration
-	 * @throws VTDException
-	 * @throws IOException
-	 */
-//	protected byte[] mergeConfigData(byte[] defaultConfData,
-//			byte[] userConfData, String xpath) throws VTDException, IOException {
-//		VTDGen vg = new VTDGen();
-//		vg.setDoc(defaultConfData);
-//		vg.parse(true);
-//		VTDNav vn = vg.getNav();
-//		AutoPilot ap = new AutoPilot(vn);
-//		ap.selectXPath(xpath);
-//		if (ap.evalXPath() != -1) {
-//			XMLModifier xm = new XMLModifier(vn);
-//			xm.insertAfterElement(userConfData);
-//			ByteArrayOutputStream os = new ByteArrayOutputStream();
-//			xm.output(os);
-//			return os.toByteArray();
-//		}
-//		return null;
-//	}
-
-	/**
-	 * Retrieves XML elements (determined by the used path) 
-	 * from the configuration.
-	 * 
-	 * @param confData
-	 *            - prepared XML
-	 * @param xpath
-	 *            - path to the retrieved configuration element
-	 * @return - the retrieved element
-	 * @throws IOException
-	 * @throws VTDException
-	 */
-	protected byte[] extractConfigData(byte[] confData, String xpath)
-			throws IOException, VTDException {
-		byte[] configData;
-		VTDGen vg = new VTDGen();
-		vg.setDoc(confData);
-		vg.parse(true);
-		VTDNav vn = vg.getNav();
-		AutoPilot ap = new AutoPilot(vn);
-		ap.selectXPath(xpath);
-		StringBuilder sb = new StringBuilder();
-
-		while (ap.evalXPath() != -1) {
-			long fragment = vn.getElementFragment();
-			int offset = (int) fragment;
-			int length = (int) (fragment >> 32);
-			sb.append(vn.toRawString(offset, length));
-		}
-
-		configData = sb.toString().getBytes();
-		return configData;
-	}
 
 	/**
 	 * Used to determine which of the elements in the configuration file
@@ -89,7 +22,7 @@ public abstract class ConfigBase {
 	 * @throws VTDException
 	 */
 	public static String getActiveConfig(byte[] data, String activePath)
-			throws IOException, VTDException {
+			throws VTDException {
 		VTDGen vg = new VTDGen();
 		vg.setDoc(data);
 		vg.parse(true);
