@@ -4164,7 +4164,6 @@ public class DataBaseConnector {
         }
         if (list.size() == dbConfig.getMaxConnections())
             LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
-        System.out.println(Arrays.toString(currentThread.getStackTrace()));
         Connection conn = getConn();
         CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, true);
         list.add(costoConn);
