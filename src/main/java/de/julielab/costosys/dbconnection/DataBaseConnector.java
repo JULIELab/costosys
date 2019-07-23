@@ -2891,10 +2891,11 @@ public class DataBaseConnector {
                         newValueStrBuilder.append("=XMLPARSE(CONTENT ?)");
                     else
                         newValueStrBuilder.append("=?");
-                    if (i < fields.size() - 1)
-                        newValueStrBuilder.append(",");
+                    newValueStrBuilder.append(",");
                 }
             }
+            if (newValueStrBuilder.length() > 0)
+                newValueStrBuilder.deleteCharAt(newValueStrBuilder.length() - 1);
             String[] primaryKeys = fieldDefinition.getPrimaryKey();
             StringBuilder conditionStrBuilder = new StringBuilder();
             for (int i = 0; i < primaryKeys.length; ++i) {
