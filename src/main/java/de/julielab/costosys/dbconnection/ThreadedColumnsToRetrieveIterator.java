@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -17,6 +18,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Exchanger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.zip.ZipException;
 
 /**
  * An iterator that returns documents stored in the database identified by the
@@ -167,7 +171,13 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                             retrievedData[i] = currentRes.getBytes(i + 1);
                             if (Boolean.parseBoolean(fields.get(i).get(JulieXMLConstants.GZIP))
                                     && retrievedData[i] != null)
-                                retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
+                                try {
+                                    retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
+                                } catch (ZipException e) {
+                                // It seems to configuration did not match the actual data. Perhaps the gzip flag
+                                    // was just wrong, we will issue a warning and continue
+                                    log.warn("The data for column {} is flagged to be in GZIP format but it wasn't. The original data is returned instead of un-gzipped data.", fields.get(i).get(JulieXMLConstants.NAME));
+                                }
                         }
                         currentList.add(retrievedData);
                     } // end ResultSet to List conversion
@@ -186,7 +196,9 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 log.error(
                         "Exception occured while reading " + "data from result set, index {}. "
                                 + "Corresponding field in schema definition is: {}. Read data was: \"{}\"",
-                        new Object[]{i + 1, fields.get(i), new String(retrievedData[i])});
+                        new Object[]{i + 1, fields.get(i), new String(retrievedData[i], StandardCharsets.UTF_8)});
+                byte[][] d = retrievedData;
+                log.error("All retrieved data was {}", IntStream.rangeClosed(0, i ).mapToObj(j -> new String(d[j], StandardCharsets.UTF_8)).collect(Collectors.toList()));
                 e.printStackTrace();
             } catch (NullPointerException e) {
                 log.debug("NPE on: Index {}, field {}, data {}",
