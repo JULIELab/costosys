@@ -52,7 +52,7 @@ public class Updater  {
 			String[] configuredDeleters = configuration.getStringArray(ConfigurationConstants.DELETER_NAME);
 			for (File file : unprocessedMedlineUpdates) {
 				log.info("Processing file {}.", file.getAbsoluteFile());
-				dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME);
+				dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME, true);
 				List<String> pmidsToDelete = getPmidsToDelete(file);
 				for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
 					IDocumentDeleter documentDeleter = it.next();

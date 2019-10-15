@@ -641,7 +641,7 @@ public class CLI {
                 dbc.withConnectionExecute(c -> c.importFromXMLFile(fileStr, superTableName));
             } else {
                 logMessage("Table is not empty or update mode was explicitly specified, processing Updates.");
-                dbc.withConnectionExecute(c -> c.updateFromXML(fileStr, superTableName));
+                dbc.withConnectionExecute(c -> c.updateFromXML(fileStr, superTableName, true));
                 logMessage("Updates finished.");
             }
         } else {

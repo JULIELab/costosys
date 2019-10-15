@@ -256,7 +256,7 @@ public class DataBaseConnectorTest {
         row.put("xml", null);
         rows.add(row);
 
-        dbc.updateFromRowIterator(rows.iterator(), "TableWithNull", true, "pubmed");
+        dbc.updateFromRowIterator(rows.iterator(), "TableWithNull", true, true, "pubmed");
         dbcIterator = dbc.query("TableWithNull", Arrays.asList("pmid", "xml"));
         ids = new ArrayList<>();
         xml = new ArrayList<>();

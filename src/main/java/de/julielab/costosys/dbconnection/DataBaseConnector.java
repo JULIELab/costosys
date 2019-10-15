@@ -2276,20 +2276,23 @@ public class DataBaseConnector {
     /**
      * @param fileStr
      * @param tableName
-     * @see #updateFromXML(String, String)
+     * @param resetUpdatedDocumentsInMirrorSubsets
+     * @see #updateFromXML(String, String, boolean, String)
      */
-    public void updateFromXML(String fileStr, String tableName) {
-        updateFromXML(fileStr, tableName, activeTableSchema);
+    public void updateFromXML(String fileStr, String tableName, boolean resetUpdatedDocumentsInMirrorSubsets) {
+        updateFromXML(fileStr, tableName, resetUpdatedDocumentsInMirrorSubsets, activeTableSchema);
     }
 
     /**
      * Updates an existing database. If the file contains new entries those are
      * inserted, otherwise the table is updated to the version in the file.
      *
-     * @param fileStr   - file containing new or updated entries
-     * @param tableName - table to update
+     * @param fileStr                              - file containing new or updated entries
+     * @param tableName                            - table to update
+     * @param resetUpdatedDocumentsInMirrorSubsets If the rows of mirror subsets which correspond to the updated document table rows should be reset, i.e. is_processed and is_in_process both set to FALSE.
+     * @param schemaName                           The name of the table schema that the updated table adheres to.
      */
-    public void updateFromXML(String fileStr, String tableName, String schemaName) {
+    public void updateFromXML(String fileStr, String tableName, boolean resetUpdatedDocumentsInMirrorSubsets, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         // TODO deprecated way of determining the primary key fields?! Make sure
@@ -2323,7 +2326,7 @@ public class DataBaseConnector {
         for (String fileName : fileNames) {
             LOG.info("Updating from " + fileName);
             Iterator<Map<String, Object>> fileIt = xp.prepare(fileName);
-            updateFromRowIterator(fileIt, tableName, true, schemaName);
+            updateFromRowIterator(fileIt, tableName, true, resetUpdatedDocumentsInMirrorSubsets, schemaName);
         }
     }
 
@@ -2467,8 +2470,8 @@ public class DataBaseConnector {
      * @param it        - an Iterator, yielding new or updated entries.
      * @param tableName - the updated table
      */
-    public void updateFromRowIterator(Iterator<Map<String, Object>> it, String tableName) {
-        updateFromRowIterator(it, tableName, true, activeTableSchema);
+    public void updateFromRowIterator(Iterator<Map<String, Object>> it, String tableName, boolean resetUpdatedDocumentsInMirrorSubsets) {
+        updateFromRowIterator(it, tableName, true, resetUpdatedDocumentsInMirrorSubsets, activeTableSchema);
     }
 
     /**
@@ -2479,15 +2482,15 @@ public class DataBaseConnector {
      * <p>
      * The input rows are expected to fit the table schema <code>schemaName</code>.
      *
-     * @param it         - an Iterator, yielding new or updated entries.
-     * @param tableName  - the updated table
-     * @param commit     - if <tt>true</tt>, the updated data will be committed in batches
-     *                   within this method; nothing will be commit otherwise.
-     * @param schemaName the name of the table schema corresponding to the updated data
-     *                   table
+     * @param it                                   - an Iterator, yielding new or updated entries.
+     * @param tableName                            - the updated table
+     * @param commit                               - if <tt>true</tt>, the updated data will be committed in batches
+     *                                             within this method; nothing will be commit otherwise.
+     * @param resetUpdatedDocumentsInMirrorSubsets
+     * @param schemaName                           the name of the table schema corresponding to the updated data
      */
     public void updateFromRowIterator(Iterator<Map<String, Object>> it, String tableName,
-                                      boolean commit, String schemaName) {
+                                      boolean commit, boolean resetUpdatedDocumentsInMirrorSubsets, String schemaName) {
         // Fast return to avoid unnecessary communication with the database.
         if (!it.hasNext())
             return;
@@ -2501,14 +2504,17 @@ public class DataBaseConnector {
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
             wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
-            LOG.trace("Retrieving mirror subsets of table {}", tableName);
-            LinkedHashMap<String, Boolean> mirrorNames = getMirrorSubsetNames(conn, tableName);
 
-            List<PreparedStatement> mirrorStatements = null;
-            if (mirrorNames != null) {
-                mirrorStatements = new ArrayList<>();
-                for (String mirror : mirrorNames.keySet()) {
-                    mirrorStatements.add(conn.prepareStatement(String.format(mirrorInsertStmtString, mirror)));
+            Map<String, Boolean> mirrorNames = Collections.emptyMap();
+            List<PreparedStatement> mirrorStatements = Collections.emptyList();
+            if (resetUpdatedDocumentsInMirrorSubsets) {
+                LOG.trace("Retrieving mirror subsets of table {}", tableName);
+                mirrorNames = getMirrorSubsetNames(conn, tableName);
+                if (mirrorNames != null) {
+                    mirrorStatements = new ArrayList<>();
+                    for (String mirror : mirrorNames.keySet()) {
+                        mirrorStatements.add(conn.prepareStatement(String.format(mirrorInsertStmtString, mirror)));
+                    }
                 }
             }
 
@@ -2630,7 +2636,7 @@ public class DataBaseConnector {
      * @throws SQLException
      */
     private void executeAndCommitUpdate(String tableName, CoStoSysConnection externalConn, boolean commit, String schemaName,
-                                        FieldConfig fieldConfig, LinkedHashMap<String, Boolean> mirrorNames,
+                                        FieldConfig fieldConfig, Map<String, Boolean> mirrorNames,
                                         List<PreparedStatement> mirrorStatements, Collection<PreparedStatement> preparedStatements, List<Map<String, Object>> cache)
             throws SQLException {
         boolean wasAutoCommit = externalConn.getAutoCommit();
@@ -2675,7 +2681,7 @@ public class DataBaseConnector {
                         // re-import it.
                         fillUpdateLists(toResetRows, returned, toInsertMirror, null, null, fieldConfig);
                         if (toInsertMirror.size() > 0) {
-                            LOG.trace("{} updated rows where not found in this mirror subset. They will be added");
+                            LOG.trace("{} updated rows where not found in this mirror subset. They will be added", toInsertMirror.size());
                             // The mirror insert statements are a parallel list
                             // to mirrorNames, thus the jth mirrorName belong to
                             // the jth insert statement.
@@ -2766,8 +2772,7 @@ public class DataBaseConnector {
         String stmtTemplate = "INSERT INTO %s (%s) VALUES (%s)";
         String pkStr = fieldConfig.getPrimaryKeyString();
         String[] wildCards = new String[fieldConfig.getPrimaryKey().length];
-        for (int i = 0; i < wildCards.length; i++)
-            wildCards[i] = "?";
+        Arrays.fill(wildCards, "?");
         String wildCardStr = StringUtils.join(wildCards, ",");
         return String.format(stmtTemplate, "%s", pkStr, wildCardStr);
     }
@@ -2807,47 +2812,6 @@ public class DataBaseConnector {
         return String.format(stmtTemplate, tableName, columnsStrBuilder.toString(), valuesStrBuilder.toString());
     }
 
-    /**
-     * Constructs an SQL prepared statement for updating data rows in the database
-     * table <code>tableName</code> according to the field schema definition.
-     *
-     * <samp> <b>Example:</b>
-     * <p>
-     * If the field schema contains two rows ('pmid' and 'xml') and pmid is primary
-     * key, the resulting String will be
-     *
-     * <center>UPDATE <tableName> SET pmid=?, xml=? WHERE pmid=?</center> </samp>
-     *
-     * @param tableName       Name of the database table to import data into.
-     * @param fieldDefinition A {@link FieldConfig} object determining the rows to be imported.
-     * @return An SQL prepared statement string for import of data into the table.
-     */
-    private String constructUpdateStatementString(String tableName, FieldConfig fieldDefinition) {
-        String stmtTemplate = "UPDATE %s SET %s WHERE %s";
-        List<Map<String, String>> fields = fieldDefinition.getFields();
-        StringBuilder newValueStrBuilder = new StringBuilder();
-        for (int i = 0; i < fields.size(); ++i) {
-            newValueStrBuilder.append(fields.get(i).get(JulieXMLConstants.NAME));
-            if (fields.get(i).get(JulieXMLConstants.TYPE).equals("xml"))
-                newValueStrBuilder.append("=XMLPARSE(CONTENT ?)");
-            else
-                newValueStrBuilder.append("=?");
-            if (i < fields.size() - 1)
-                newValueStrBuilder.append(",");
-        }
-        String[] primaryKeys = fieldDefinition.getPrimaryKey();
-        StringBuilder conditionStrBuilder = new StringBuilder();
-        for (int i = 0; i < primaryKeys.length; ++i) {
-            String key = primaryKeys[i];
-            conditionStrBuilder.append(key).append("=?");
-            if (i < primaryKeys.length - 1)
-                conditionStrBuilder.append(" AND ");
-        }
-        String statementString = String.format(stmtTemplate, tableName, newValueStrBuilder.toString(),
-                conditionStrBuilder.toString());
-        LOG.trace("PreparedStatement update command: {}", statementString);
-        return statementString;
-    }
 
     /**
      * Constructs an SQL prepared statement for updating data rows in the database
