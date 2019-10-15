@@ -2014,7 +2014,7 @@ public class DataBaseConnector {
      * @param tableName table to gather mirror subsets for
      * @return names of all mirror subsets for this table
      */
-    private LinkedHashMap<String, Boolean> getMirrorSubsetNames(CoStoSysConnection conn, String tableName) {
+    public LinkedHashMap<String, Boolean> getMirrorSubsetNames(CoStoSysConnection conn, String tableName) {
         if (!tableExists(conn, Constants.MIRROR_COLLECTION_NAME))
             return null;
 
