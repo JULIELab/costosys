@@ -2012,11 +2012,11 @@ public class DataBaseConnector {
 
     /**
      * @param tableName table to gather mirror subsets for
-     * @return names of all mirror subsets for this table
+     * @return names of all mirror subsets for this table in a {@link LinkedHashMap}.
      */
-    public LinkedHashMap<String, Boolean> getMirrorSubsetNames(CoStoSysConnection conn, String tableName) {
+    public Map<String, Boolean> getMirrorSubsetNames(CoStoSysConnection conn, String tableName) {
         if (!tableExists(conn, Constants.MIRROR_COLLECTION_NAME))
-            return null;
+            return Collections.emptyMap();
 
         // The mirror tables are inserted into the collecting table with schema
         // information. If the given data table is not qualified, we assume it
@@ -2374,7 +2374,7 @@ public class DataBaseConnector {
             conn.setAutoCommit(false);
             // Get the list of mirror subsets in which all new primary keys must
             // be inserted as well.
-            LinkedHashMap<String, Boolean> mirrorNames = getMirrorSubsetNames(conn, tableName);
+            Map<String, Boolean> mirrorNames = getMirrorSubsetNames(conn, tableName);
 
             PreparedStatement psDataImport = conn.prepareStatement(dataImportStmtString);
 
