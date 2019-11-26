@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import javax.management.JMX;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
+import javax.sql.DataSource;
 import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.sql.*;
@@ -98,7 +99,7 @@ public class DataBaseConnector {
                     return new ArrayList<>();
                 }
             });
-    private static HikariDataSource dataSource;
+    //private static HikariDataSource dataSource;
 
     static {
         subsetColumns = new LinkedHashMap<>();
@@ -326,7 +327,9 @@ public class DataBaseConnector {
     Connection getConn() {
 
         Connection conn = null;
+        HikariDataSource dataSource;
         synchronized (DataBaseConnector.class) {
+            dataSource = pools.get(dbURL);
             if (null == dataSource || dataSource.isClosed()) {
                 LOG.debug("Setting up connection pool data source");
                 HikariConfig hikariConfig = new HikariConfig();
@@ -339,12 +342,11 @@ public class DataBaseConnector {
                 hikariConfig.setConnectionTimeout(60000);
                 // required to be able to get the number of idle connections, see below
                 hikariConfig.setRegisterMbeans(true);
-                HikariDataSource ds = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
-                if (ds.isClosed()) {
-                    ds = new HikariDataSource(hikariConfig);
+                dataSource = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
+                if (dataSource.isClosed()) {
+                    dataSource = new HikariDataSource(hikariConfig);
+                    pools.put(dbURL, dataSource);
                 }
-                pools.put(dbURL, ds);
-                dataSource = ds;
             }
         }
 
@@ -3846,20 +3848,16 @@ public class DataBaseConnector {
     public void close() {
         releaseConnections();
         LOG.debug("Shutting down DataBaseConnector.");
-        if (dataSource instanceof HikariDataSource) {
-            LOG.debug("Checking if the datasource is still in use (perhaps by other threads or other DBC instances)");
-            final int activeConnections = dataSource.getHikariPoolMXBean().getActiveConnections();
-            final int awaitingConnection = dataSource.getHikariPoolMXBean().getThreadsAwaitingConnection();
-            if (activeConnections > 0) {
-                LOG.debug("Data source is still in use ({} connections active), not closing it. Another DBC instance should exist that will attempt closing the data source at a later time point.", activeConnections);
-            } else if (awaitingConnection > 0) {
-                LOG.debug("There are no active connections right now but {} threads await a connection. Letting the data source open. Another DBC instance should close it later.", awaitingConnection);
-            } else {
-                LOG.debug("Data source does not have active connections, closing it.");
-                dataSource.close();
-            }
+        HikariDataSource dataSource = pools.get(dbURL);
+        LOG.debug("Checking if the datasource is still in use (perhaps by other threads or other DBC instances)");
+        final int activeConnections = dataSource.getHikariPoolMXBean().getActiveConnections();
+        final int awaitingConnection = dataSource.getHikariPoolMXBean().getThreadsAwaitingConnection();
+        if (activeConnections > 0) {
+            LOG.debug("Data source is still in use ({} connections active), not closing it. Another DBC instance should exist that will attempt closing the data source at a later time point.", activeConnections);
+        } else if (awaitingConnection > 0) {
+            LOG.debug("There are no active connections right now but {} threads await a connection. Letting the data source open. Another DBC instance should close it later.", awaitingConnection);
         } else {
-            LOG.debug("Closing data source");
+            LOG.debug("Data source does not have active connections, closing it.");
             dataSource.close();
         }
     }

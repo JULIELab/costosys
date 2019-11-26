@@ -17,7 +17,7 @@ import static org.junit.Assert.assertEquals;
 
 public class ThreadedColumnsIteratorTest {
     @ClassRule
-    public static PostgreSQLContainer postgres = (PostgreSQLContainer) new PostgreSQLContainer();
+    public static PostgreSQLContainer postgres = new PostgreSQLContainer();
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
     @BeforeClass
