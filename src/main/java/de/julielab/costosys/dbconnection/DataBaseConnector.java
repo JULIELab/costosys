@@ -2087,6 +2087,12 @@ public class DataBaseConnector {
                             String lastComponent) {
         String stStr = null;
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+            conn.setAutoCommit(false);
+            Statement st = conn.createStatement();
+            // We had deadlocks in the DB due to multiple resets in the past. The exclusive lock should
+            // avoid that. Also, it is a good idea to lock the table for the reset anyway since it is
+            // an operation that changes the complete state of the table.
+            st.execute("LOCK TABLE " + subsetTableName + " IN EXCLUSIVE MODE");
             List<String> constraints = new ArrayList<>();
             if (whereNotProcessed)
                 constraints.add(Constants.IS_PROCESSED + " = FALSE");
@@ -2094,7 +2100,6 @@ public class DataBaseConnector {
                 constraints.add(Constants.HAS_ERRORS + " = FALSE");
             if (lastComponent != null)
                 constraints.add(Constants.LAST_COMPONENT + " = '" + lastComponent + "'");
-            Statement st = conn.createStatement();
             stStr = String.format(
                     "UPDATE %s SET %s = FALSE, %s = FALSE, %s='%s', %s = FALSE, %s = NULL, %s = NULL WHERE (%s = TRUE OR %s = TRUE)",
                     subsetTableName, Constants.IN_PROCESS, Constants.IS_PROCESSED, Constants.LAST_COMPONENT,
