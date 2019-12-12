@@ -2107,7 +2107,9 @@ public class DataBaseConnector {
                     Constants.IS_PROCESSED, Constants.IN_PROCESS);
             if (!constraints.isEmpty())
                 stStr += " AND " + constraints.stream().collect(Collectors.joining(" AND "));
+            LOG.debug("Resetting table {} with SQL: {}", subsetTableName, stStr);
             st.execute(stStr);
+            conn.commit();
         } catch (SQLException e) {
             LOG.error("Error executing SQL command: " + stStr, e);
         }
