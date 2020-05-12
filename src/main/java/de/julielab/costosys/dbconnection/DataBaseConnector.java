@@ -12,9 +12,12 @@ import de.julielab.costosys.configuration.*;
 import de.julielab.costosys.dbconnection.util.*;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
+import de.julielab.xml.XmiSplitConstants;
+import de.julielab.xml.binary.BinaryJedisFormatUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.uima.resource.ResourceInitializationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +36,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.ZipException;
 
 
 /**
@@ -3201,8 +3206,14 @@ public class DataBaseConnector {
                             byte[][] retrievedData = new byte[returnedFields.size()][];
                             for (int i = 0; i < retrievedData.length; i++) {
                                 retrievedData[i] = rs.getBytes(i + 1);
-                                if (Boolean.parseBoolean(returnedFields.get(i).get(JulieXMLConstants.GZIP)))
-                                    retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
+                                if (Boolean.parseBoolean(returnedFields.get(i).get(JulieXMLConstants.GZIP))) {
+                                    try {
+                                        retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
+                                    } catch (ZipException e) {
+                                        LOG.error("Got ZipException with message {} when trying to unzip data from field {}", e.getMessage(), returnedFields.get(i).get(JulieXMLConstants.NAME));
+                                        throw e;
+                                    }
+                                }
                             }
                             hasNext = rs.next();
                             if (!hasNext)
@@ -3421,7 +3432,7 @@ public class DataBaseConnector {
         if (!joined) {
             FieldConfig fieldConfig = fieldConfigs.get(schemaNames[0]);
             numColumns = fieldConfig.getColumnsToRetrieve().length;
-            fields = fieldConfig.getFields();
+            fields = fieldConfig.getFieldsToRetrieve();
         } else {
             for (int i = 0; i < schemaNames.length; i++) {
                 FieldConfig fieldConfig = fieldConfigs.get(schemaNames[i]);
@@ -3915,7 +3926,7 @@ public class DataBaseConnector {
             ret = new FieldConfig(fields, "", fieldConfigName);
             fieldConfigs.put(ret.getName(), ret);
         } else {
-            ret = fieldConfigs.get(fieldConfigs.get(fieldConfigName));
+            ret = fieldConfigs.get(fieldConfigName);
         }
         return ret;
     }
@@ -4331,5 +4342,7 @@ public class DataBaseConnector {
         }
 
     }
+
+
 
 }

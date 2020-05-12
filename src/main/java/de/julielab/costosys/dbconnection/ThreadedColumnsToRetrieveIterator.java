@@ -35,9 +35,9 @@ import java.util.zip.ZipException;
  */
 public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[][]> {
     private final static Logger LOG = LoggerFactory.getLogger(ThreadedColumnsToRetrieveIterator.class);
-    private DataBaseConnector dbc;
     private static int arrayResToListThreadCounter;
     private static int arrayFromDBThreadCounter;
+    private DataBaseConnector dbc;
 
     // To query by PMID, uses two other threads
     public ThreadedColumnsToRetrieveIterator(DataBaseConnector dbc, CoStoSysConnection conn, List<Object[]> ids, String table, String schemaName) {
@@ -174,9 +174,9 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                                 try {
                                     retrievedData[i] = JulieXMLTools.unGzipData(retrievedData[i]);
                                 } catch (ZipException e) {
-                                // It seems to configuration did not match the actual data. Perhaps the gzip flag
+                                    // It seems to configuration did not match the actual data. Perhaps the gzip flag
                                     // was just wrong, we will issue a warning and continue
-                                    log.warn("The data for column {} is flagged to be in GZIP format but it wasn't. The original data is returned instead of un-gzipped data.", fields.get(i).get(JulieXMLConstants.NAME));
+                                    log.warn("Got error with message {}. The data for column {} is flagged to be in GZIP format but it wasn't. The original data is returned instead of un-gzipped data.",e.getMessage(), fields.get(i).get(JulieXMLConstants.NAME));
                                 }
                         }
                         currentList.add(retrievedData);
@@ -198,7 +198,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                                 + "Corresponding field in schema definition is: {}. Read data was: \"{}\"",
                         new Object[]{i + 1, fields.get(i), new String(retrievedData[i], StandardCharsets.UTF_8)});
                 byte[][] d = retrievedData;
-                log.error("All retrieved data was {}", IntStream.rangeClosed(0, i ).mapToObj(j -> new String(d[j], StandardCharsets.UTF_8)).collect(Collectors.toList()));
+                log.error("All retrieved data was {}", IntStream.rangeClosed(0, i).mapToObj(j -> new String(d[j], StandardCharsets.UTF_8)).collect(Collectors.toList()));
                 e.printStackTrace();
             } catch (NullPointerException e) {
                 log.debug("NPE on: Index {}, field {}, data {}",
@@ -264,7 +264,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 this.joined = true;
             }
             buildSelectFrom(table, schemaName);
-            setName("ArrayFromDBThread-"+ ++arrayFromDBThreadCounter);
+            setName("ArrayFromDBThread-" + ++arrayFromDBThreadCounter);
             setDaemon(true);
             start();
         }

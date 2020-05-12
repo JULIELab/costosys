@@ -31,7 +31,7 @@ public class DataBaseConnectorTest {
 
     @BeforeClass
     public static void setUp() {
-        postgres = new PostgreSQLContainer();
+        postgres = new PostgreSQLContainer<>();
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
@@ -120,13 +120,12 @@ public class DataBaseConnectorTest {
         dbc.reserveConnection();
         dbc.createSubsetTable("statussubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
         dbc.initSubset("statussubset", Constants.DEFAULT_DATA_TABLE_NAME);
-        int bs = dbc.getQueryBatchSize();
         // mark a few documents to be in process
         dbc.retrieveAndMark("statussubset", "testcomponent", "localhost", "0", 2, null);
         SubsetStatus status = dbc.status("statussubset", EnumSet.allOf(DataBaseConnector.StatusElement.class));
         assertThat(status.total).isEqualTo(10);
         assertThat(status.inProcess).isEqualTo(2);
-        assertThat(status.pipelineStates).containsKeys("testcomponent").extracting("testcomponent").contains(2L);
+        assertThat(status.pipelineStates).containsKeys("testcomponent").extracting("testcomponent").isEqualTo(2L);
         dbc.setQueryBatchSize(2);
         dbc.releaseConnections();
     }
@@ -173,8 +172,8 @@ public class DataBaseConnectorTest {
         // Iterators use their own connection
         DBCIterator<byte[][]> dbcIterator = dbc.queryDataTable("myxmltest", null, null, "xmi_text_legacy");
         byte[][] next = dbcIterator.next();
-        assertThat(new String(next[0], "UTF-8")).isEqualTo("doc1");
-        assertThat(new String(next[1], "UTF-8")).isEqualTo("some nonsense");
+        assertThat(new String(next[0], StandardCharsets.UTF_8)).isEqualTo("doc1");
+        assertThat(new String(next[1], StandardCharsets.UTF_8)).isEqualTo("some nonsense");
     }
 
     @Test

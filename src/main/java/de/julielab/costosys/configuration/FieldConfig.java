@@ -48,7 +48,6 @@ public class FieldConfig extends ConfigBase {
     private String forEachXPath;
     private String[] primaryKey;
     private String[] columns;
-    private String[] columnsToRetrieve;
     private String timestampFieldName = null;
     private List<Integer> primaryKeyFieldNumbers = null;
     private byte[] configData;
@@ -81,10 +80,6 @@ public class FieldConfig extends ConfigBase {
                 map(field -> field.get(JulieXMLConstants.NAME)).
                 toArray(String[]::new);
         columns = fields.stream().
-                map(field -> field.get(JulieXMLConstants.NAME)).
-                toArray(String[]::new);
-        columnsToRetrieve = fields.stream().
-                filter(field -> Boolean.parseBoolean((field.get(JulieXMLConstants.RETRIEVE)))).
                 map(field -> field.get(JulieXMLConstants.NAME)).
                 toArray(String[]::new);
         primaryKeyFieldNumbers = new ArrayList<>();
@@ -291,15 +286,13 @@ public class FieldConfig extends ConfigBase {
     }
 
     public String[] getColumnsToRetrieve() {
-        if (columnsToRetrieve == null) {
-            List<String> retrieveColumnNames = new ArrayList<>();
-            for (Map<String, String> field : fields) {
-                if (Boolean.parseBoolean(field.get(JulieXMLConstants.RETRIEVE)))
-                    retrieveColumnNames.add(field.get(JulieXMLConstants.NAME));
-            }
-            columnsToRetrieve = new String[retrieveColumnNames.size()];
-            retrieveColumnNames.toArray(columnsToRetrieve);
+        List<String> retrieveColumnNames = new ArrayList<>();
+        for (Map<String, String> field : fields) {
+            if (Boolean.parseBoolean(field.get(JulieXMLConstants.RETRIEVE)))
+                retrieveColumnNames.add(field.get(JulieXMLConstants.NAME));
         }
+        String[] columnsToRetrieve = new String[retrieveColumnNames.size()];
+        retrieveColumnNames.toArray(columnsToRetrieve);
         return columnsToRetrieve;
     }
 
