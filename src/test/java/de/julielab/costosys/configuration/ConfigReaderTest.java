@@ -18,7 +18,7 @@ package de.julielab.costosys.configuration;
 import com.ximpleware.VTDException;
 import de.julielab.xml.JulieXMLConstants;
 import org.apache.commons.io.IOUtils;
-import org.junit.Test;
+import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.io.InputStream;

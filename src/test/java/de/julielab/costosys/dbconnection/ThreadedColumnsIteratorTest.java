@@ -1,13 +1,13 @@
 package de.julielab.costosys.dbconnection;
 
 import de.julielab.costosys.Constants;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.ClassRule;
-import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.BeforeClass;
+import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -16,12 +16,13 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 
 public class ThreadedColumnsIteratorTest {
-    @ClassRule
-    public static PostgreSQLContainer postgres = new PostgreSQLContainer();
+    public static PostgreSQLContainer postgres;
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
     @BeforeClass
     public static void setUp() throws SQLException {
+        postgres = new PostgreSQLContainer<>();
+        postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
         dbc.reserveConnection();
