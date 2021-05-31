@@ -1450,12 +1450,38 @@ public class DataBaseConnector {
         return !isSubsetTable(table);
     }
 
+    /**
+     * <p>Drops the table with the given name. The name must be schema-qualified unless it resides in the <tt>public</tt>
+     * schema.</p>
+     * <p>This automatically removes this table from the list of mirror tables, if it was one.</p>
+     *
+     * @param table The schema-qualified table name to drop.
+     * @return Whether the drop was successful.
+     * @throws SQLException If an error occurs.
+     */
     public boolean dropTable(String table) throws SQLException {
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+            String dataTable = getNextDataTable(table);
+            if (dataTable != null) {
+                removeTableFromMirrorSubsetList(conn, table);
+            }
             Statement stmt = conn.createStatement();
             String sql = "DROP TABLE " + table;
             return stmt.execute(sql);
         }
+    }
+
+    /**
+     * <p>Removes an entry from the table listing mirror subsets, located at {@link Constants#MIRROR_COLLECTION_NAME}.</p>
+     *
+     * @param conn             A database connection.
+     * @param mirrorSubsetName The name of the mirror subset table to be removed.
+     * @return Whether the deletion was successful.
+     * @throws SQLException If an error occurs.
+     */
+    public boolean removeTableFromMirrorSubsetList(CoStoSysConnection conn, String mirrorSubsetName) throws SQLException {
+        String sql = String.format("DELETE FROM %s WHERE %s='%s'", Constants.MIRROR_COLLECTION_NAME, Constants.MIRROR_COLUMN_SUBSET_NAME, mirrorSubsetName);
+        return conn.createStatement().execute(sql);
     }
 
     /**
@@ -2019,7 +2045,7 @@ public class DataBaseConnector {
 
     /**
      * @param tableName table to gather mirror subsets for
-     * @return names of all mirror subsets for this table in a {@link LinkedHashMap}.
+     * @return schema-qualified names of all mirror subsets for this table in a {@link LinkedHashMap}. The values indicate whether the mirror subset is in "perform update" mode.
      */
     public Map<String, Boolean> getMirrorSubsetNames(CoStoSysConnection conn, String tableName) {
         if (!tableExists(conn, Constants.MIRROR_COLLECTION_NAME))
@@ -4342,7 +4368,6 @@ public class DataBaseConnector {
         }
 
     }
-
 
 
 }

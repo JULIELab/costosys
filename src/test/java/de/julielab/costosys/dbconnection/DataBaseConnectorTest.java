@@ -160,6 +160,20 @@ public class DataBaseConnectorTest {
         assertThat(retrieved).hasSize(10);
     }
 
+    @Test(dependsOnMethods = "testRetrieveAndMark")
+    public void testMirrorSubset() throws SQLException {
+        CoStoSysConnection conn = dbc.reserveConnection();
+        dbc.defineMirrorSubset("testmirror", Constants.DEFAULT_DATA_TABLE_NAME, true, "A test mirror table");
+        assertThat(dbc.getNumRows("testmirror")).isGreaterThan(0);
+        Map<String, Boolean> mirrorSubsetNames = dbc.getMirrorSubsetNames(conn, Constants.DEFAULT_DATA_TABLE_NAME);
+        assertThat(mirrorSubsetNames.keySet()).contains("public.testmirror");
+        dbc.releaseConnections();
+        dbc.dropTable("public.testmirror");
+        mirrorSubsetNames = dbc.getMirrorSubsetNames(conn, Constants.DEFAULT_DATA_TABLE_NAME);
+        assertThat(mirrorSubsetNames.keySet()).doesNotContain("public.testmirror", "testmirror");
+        dbc.releaseConnections();
+    }
+
     @Test
     public void testXmlData() throws UnsupportedEncodingException {
         dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text_legacy", "XML Test Table"));
@@ -265,12 +279,12 @@ public class DataBaseConnectorTest {
             xml.add(next[1] != null ? ((PgSQLXML) next[1]).getString() : (String) next[1]);
         }
         assertThat(ids).containsExactly("1234", "5678");
-        assertThat(xml).containsExactly("<xmi>content1</xmi>",null);
+        assertThat(xml).containsExactly("<xmi>content1</xmi>", null);
     }
 
     @Test
     public void testColumnEmpty() {
-        dbc.createTable("EmptyTable", "medline_2017","Just an empty table");
+        dbc.createTable("EmptyTable", "medline_2017", "Just an empty table");
         assertTrue(dbc.isEmpty("EmptyTable", "xml"));
     }
 
