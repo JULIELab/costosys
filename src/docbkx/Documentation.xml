@@ -3,8 +3,8 @@
 "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
 <article>
 	<articleinfo>
-		<title>julie-medline-manager</title>
-		<releaseinfo>Version 0.1</releaseinfo>
+		<title>Corpus Storage System (CoStoSys)</title>
+		<releaseinfo>Version 1.5</releaseinfo>
 		<author>
 			<firstname>Johannes</firstname>
 
@@ -20,21 +20,20 @@
 	<section>
 		<title>Introduction</title>
 		<para>
-			The julie-medline-manager, hereafter referenced as DBC, after its
-			main component (the DataBaseConnector), makes it easy to integrate a
-			database in the
+			The Corpus Storage System, hereafter referenced as CoStoSys, makes it easy to integrate a
+			database in the UIMA document processing
 			workflows at
-			JULIE Lab. It uses the tables of a
+			JULIE Lab. CoStoSys is the backbone of the <ulink url="http://julielab.de/jedis/">Jena Document Information System, JeDIS</ulink>. It uses the tables of a
 			PostgreSQL database
 			to store documents out of large text collections
-			(usually PubMeds Medline)
+			(usually PubMed/Medline)
 			and includes several
 			features to make
 			experiments
 			easier, like:
 			<itemizedlist>
 				<listitem>
-					<para>Several ways to define a subset for your experiments.</para>
+					<para>Several ways to define corpus subsets.</para>
 				</listitem>
 				<listitem>
 					<para>Marking files to indicate their processing status (only with
@@ -74,12 +73,24 @@
 		<title>Quickstart</title>
 		<para>
 			This section describes a typical workflow to demonstrate the usage of
-			the DBCs CLI. For all commands you are supposed to enter
-			<code>java -jar JAR_NAME</code>
-			and add the specific parameters given in the examples. If you never
-			used the CLI before
-			you will need to enter your username and password
-			for the database in a dialog.
+			the CoStoSys CLI. For all commands you are supposed to enter
+			<code>java -jar costosys-&lt;version&gt;.jar</code>
+			and add the specific parameters given in the examples.
+		</para>
+		<para>
+			First of all, you will need to create a configuration file that specifies the format
+			of the XML files and the connection to the PostgreSQL database.
+			By convention, the user specified configuration file needs to by named <emphasis>costosys.xml</emphasis>
+			and must reside in the working directory when calling the CLI program. This will be the location of the
+			costosys-&lt;version&gt;.jar file most of the time.
+		</para>
+		<para>
+			Note that you will need to provide the username and password
+			for the database in an interactive dialog on first use of the CoStoSys CLI with a specific
+			database connection. The credentials will be stored in the file <emphasis>.dbcUser</emphasis> in your
+			home directory in plain text. Hence, you should make sure that only yourself can access the file.
+			Additionally note that this is the preferred way to create the CoStoSys credentials file for later
+			access from within a UIMA pipeline.
 		</para>
 		<para>
 			Assuming you want to create a primary data table to store an XML
@@ -148,8 +159,7 @@
 	<section>
 		<title>Tables in the database</title>
 		<para>
-			This section explains the different kinds of tables used by the
-			DBC. PostgreSQL tables can have a schema as a prefix, separated by a
+			This section explains the different kinds of tables used by CoStoSys. PostgreSQL tables can have a schema as a prefix, separated by a
 			dot: SCHEMA.TABLE
 		</para>
 		<section>
@@ -219,7 +229,7 @@
 				the primary data table changes. Deletion is propagated by the
 				foreign keys (i.e. you can delete directly via pgAdmin),
 				while
-				insertions are handled by the import/update methods of the DBC
+				insertions are handled by the import/update methods of the CoStoSys
 				(i.e.
 				direct edits via pgAdmin cause errors!)
 				A special table,
@@ -245,22 +255,20 @@
 	<section>
 		<title>Configuration files</title>
 		<para>
-			Configuration files are XML files which provide the DBC your
+			Configuration files are XML files which provide CoStoSys your
 			settings for
 			the database connection and the structure of the tables.
 			There is a default
 			configuration file inside the
 			executable jar, but,
 			you will probably want to
-			provide a custom configuration file (put it
-			in the directory
-			containing the julie-medline-managers jar).
-			The DBC
-			will be usable without it, also the
-			settings in the deaulft
+			provide a custom configuration file named costosys.xml located in the working directory.
+			CoStoSys
+			will be usable without it, although the
+			settings in the default
 			configuration are
 			intended for testing only.
-			A
+			An
 			XSD-Scheme
 			(configuration.xsd in src/main/resources) exists to help with the
 			creation of
@@ -943,7 +951,7 @@
 			<title>CLI vs DBC
 	</title>
 			<para>
-				The CLI does not expose all abilities of the DBC and does little
+				The CLI does not expose all abilities of CoStoSys and does little
 				more than call it.
 				Nevertheless, the CLI provides some consistency
 				checks to
@@ -951,7 +959,7 @@
 					<listitem>
 						<para>provide useful error messages instead of SQL errors
 							produced
-							by the DBC itself.</para>
+							by CoStoSys itself.</para>
 					</listitem>
 					<listitem>
 						<para>
@@ -995,7 +1003,7 @@
 	</title>
 		<para>There are some possible causes for errors useres should avoid
 			and some parts
-			of the DBC which may need work from future developers.
+			of CoStoSys which may need work from future developers.
 		</para>
 		<section>
 			<title>Multithreading
