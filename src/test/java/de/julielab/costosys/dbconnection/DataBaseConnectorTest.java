@@ -4,6 +4,7 @@ import de.julielab.costosys.Constants;
 import de.julielab.costosys.cli.TableNotFoundException;
 import de.julielab.costosys.configuration.FieldConfig;
 import de.julielab.costosys.dbconnection.util.TableSchemaMismatchException;
+import de.julielab.java.utilities.IOStreamUtilities;
 import de.julielab.xml.JulieXMLConstants;
 import org.postgresql.jdbc.PgSQLXML;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -11,13 +12,15 @@ import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -281,6 +284,57 @@ public class DataBaseConnectorTest {
         assertThat(ids).containsExactly("1234", "5678");
         assertThat(xml).containsExactly("<xmi>content1</xmi>", null);
     }
+
+    @Test
+    public void testUpdate() throws Exception {
+        // Insert the test data, delete half of it, change the other half, update from the original data, check
+        // that everything is as it should be according to the original XML data.
+        CoStoSysConnection conn = dbc.reserveConnection();
+        String dataTableName = "update_test";
+        dbc.createTable(dataTableName, "Test data table");
+        dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", dataTableName);
+        assertThat(dbc.getNumRows(dataTableName)).isEqualTo(10);
+        // Preparation: Retrieve the document IDs and delete half.
+        String primaryKeyString = dbc.getActiveTableFieldConfiguration().getPrimaryKeyString();
+        List<String> insertedDocumentIds = new ArrayList<>();
+        ResultSet rs = conn.createStatement().executeQuery("SELECT " + primaryKeyString + " FROM " + dataTableName);
+        while (rs.next())
+            insertedDocumentIds.add(rs.getString(1));
+        List<String> toDelete = insertedDocumentIds.subList(5, 10);
+        PreparedStatement ps = conn.prepareStatement("DELETE FROM " + dataTableName + " WHERE " + primaryKeyString + "=?");
+        for (int i = 0; i < toDelete.size(); i++) {
+            String docIdToDelete = toDelete.get(i);
+            ps.setString(1, docIdToDelete);
+            ps.addBatch();
+        }
+        ps.executeBatch();
+        assertThat(dbc.getNumRows(dataTableName)).isEqualTo(5);
+
+        // Peparation: And now also change the XML field contents of the first row
+        String testValue = "<sometag>testvalue</sometag>";
+        conn.createStatement().execute("UPDATE " + dataTableName + " SET xml='" + testValue + "' WHERE " + primaryKeyString + "='" + insertedDocumentIds.get(0) + "'");
+        ResultSet rs2 = conn.createStatement().executeQuery("SELECT xml FROM " + dataTableName + " WHERE " + primaryKeyString + "='" + insertedDocumentIds.get(0) + "'");
+        assertTrue(rs2.next());
+        assertThat(new String(rs2.getBytes(1), StandardCharsets.UTF_8)).isEqualTo(testValue);
+
+        // The actual test: Update from the original XML and make sure everything is in order
+        dbc.updateFromXML("src/test/resources/documents/documentSet.xml.gz", dataTableName, false);
+        // Check that missing documents have been added
+        assertThat(dbc.getNumRows(dataTableName)).isEqualTo(10);
+        // Check that existing documents have been updated
+        ResultSet rs3 = conn.createStatement().executeQuery("SELECT xml FROM " + dataTableName + " WHERE " + primaryKeyString + "='" + insertedDocumentIds.get(0) + "'");
+        assertTrue(rs3.next());
+        String xmlValue;
+        try(ByteArrayInputStream xmlBytes = new ByteArrayInputStream(rs3.getBytes(1)); BufferedInputStream bis = new BufferedInputStream(new GZIPInputStream(xmlBytes))) {
+            xmlValue = IOStreamUtilities.getStringFromInputStream(bis);
+        }
+        assertThat(xmlValue).startsWith("<MedlineCitation Owner=\"NLM\" Status=\"MEDLINE\">").contains("<PMID Version=\"1\">10922238</PMID>").endsWith("<NumberOfReferences>25</NumberOfReferences>\n" +
+                "</MedlineCitation>");
+
+        dbc.dropTable(dataTableName);
+        dbc.releaseConnections();
+    }
+
 
     @Test
     public void testColumnEmpty() {
