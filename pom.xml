@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>costosys</artifactId>
-    <version>1.5.2-SNAPSHOT</version>
+    <version>1.5.2</version>
     <name>Corpus Storage System</name>
     <description>A utility for managing documents stored in a PostgreSQL database. The documents are imported into a
         PostgreSQL DB as full texts with the goal to be able to retrieve the documents by their PubMedID efficiently.
@@ -13,8 +13,9 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>2.2</version>
+                <version>3.3.0</version>
                 <configuration>
                     <descriptors>
                         <descriptor>cli-assembly.xml</descriptor>
@@ -37,6 +38,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <version>3.2.0</version>
                 <configuration>
                     <!-- exclude logback.xml -->
                     <excludes>

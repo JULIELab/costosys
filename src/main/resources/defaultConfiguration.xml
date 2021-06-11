@@ -21,7 +21,7 @@
 						 forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
 					   retrieve="true"/>
-				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
 					   retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="medline_2016" forEach="/MedlineCitationSet/MedlineCitation">
@@ -33,7 +33,7 @@
 			<tableSchema name="medline_2016_nozip" forEach="/MedlineCitationSet/MedlineCitation">
 				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
 					   retrieve="true"/>
-				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
+				<field name="xml" type="text" xpath="." returnXMLFragment="true"
 					   retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="pubmed_gzip"
