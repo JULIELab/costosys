@@ -34,7 +34,7 @@ public class DataBaseConnectorTest {
 
     @BeforeClass
     public static void setUp() {
-        postgres = new PostgreSQLContainer<>();
+        postgres = new PostgreSQLContainer<>("postgres:11.12");
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
@@ -104,7 +104,6 @@ public class DataBaseConnectorTest {
                 String sql = String.format("INSERT INTO %s VALUES('%s','%s')", "additionalTable2", pk[0], "Value" + (i + 42));
                 stmt.execute(sql);
             }
-            costoConn.commit();
         }
         final DBCIterator<byte[][]> data = dbc.queryDataTable("_data._data", null, new String[]{"additionalTable", "additionalTable2"}, new String[]{"medline_2016", "medline_2016_additional", "medline_2016_additional"});
         int i = 0;

@@ -12,19 +12,15 @@ import de.julielab.costosys.configuration.*;
 import de.julielab.costosys.dbconnection.util.*;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
-import de.julielab.xml.XmiSplitConstants;
-import de.julielab.xml.binary.BinaryJedisFormatUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.uima.resource.ResourceInitializationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.management.JMX;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
-import javax.sql.DataSource;
 import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.sql.*;
@@ -36,7 +32,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipException;
 
 
@@ -558,21 +553,19 @@ public class DataBaseConnector {
         Connection conn = null;
         boolean idsRetrieved = false;
         while (!idsRetrieved) {
+                boolean autoCommit = true;
             try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
                 FieldConfig fieldConfig = fieldConfigs.get(schemaName);
                 conn = costoConn.getConnection();
 
+                autoCommit = conn.getAutoCommit();
                 conn.setAutoCommit(false);
                 Statement st = conn.createStatement();
                 String orderCommand = order == null ? "" : order;
                 if (!orderCommand.equals("") && !orderCommand.trim().toUpperCase().startsWith("ORDER BY"))
                     orderCommand = "ORDER BY " + orderCommand;
-                String joinStatement = Stream.of(fieldConfig.getPrimaryKey()).map(pk -> {
-                    return "t." + pk + "=subquery." + pk;
-                }).collect(Collectors.joining(" AND "));
-                String returnColumns = Stream.of(fieldConfig.getPrimaryKey()).map(pk -> {
-                    return "t." + pk;
-                }).collect(Collectors.joining(","));
+                String joinStatement = Stream.of(fieldConfig.getPrimaryKey()).map(pk -> "t." + pk + "=subquery." + pk).collect(Collectors.joining(" AND "));
+                String returnColumns = Stream.of(fieldConfig.getPrimaryKey()).map(pk -> "t." + pk).collect(Collectors.joining(","));
 
                 // following
                 // http://dba.stackexchange.com/questions/69471/postgres-update-limit-1
@@ -597,6 +590,7 @@ public class DataBaseConnector {
                     idsRetrieved = true;
                 }
                 conn.commit();
+                conn.setAutoCommit(autoCommit);
             } catch (SQLException e) {
                 // It is possible to run into deadlocks with the above query. Then, one process
                 // will be canceled and we get an exception. If so, just log is and try again.
@@ -618,8 +612,14 @@ public class DataBaseConnector {
                     try {
                         conn.commit();
                     } catch (SQLException e1) {
-                        e1.printStackTrace();
+                        throw new CoStoSysSQLRuntimeException(e);
                     }
+                }
+            } finally {
+                try {
+                    conn.setAutoCommit(autoCommit);
+                } catch (SQLException e) {
+                    throw new CoStoSysSQLRuntimeException(e);
                 }
             }
         }
@@ -2118,7 +2118,9 @@ public class DataBaseConnector {
                             String lastComponent) {
         String stStr = null;
         try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+            boolean autoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
+            conn.commit();
             Statement st = conn.createStatement();
             // We had deadlocks in the DB due to multiple resets in the past. The exclusive lock should
             // avoid that. Also, it is a good idea to lock the table for the reset anyway since it is
@@ -2141,6 +2143,7 @@ public class DataBaseConnector {
             LOG.debug("Resetting table {} with SQL: {}", subsetTableName, stStr);
             st.execute(stStr);
             conn.commit();
+            conn.setAutoCommit(autoCommit);
         } catch (SQLException e) {
             LOG.error("Error executing SQL command: " + stStr, e);
         }
@@ -3212,10 +3215,15 @@ public class DataBaseConnector {
                     // first we get IDs from a subset and then only the actual
                     // documents
                     // for these IDs.
+                    boolean autoCommit = conn.getAutoCommit();
+                    try {
                     conn.setAutoCommit(false);
                     Statement stmt = conn.createStatement();
                     stmt.setFetchSize(queryBatchSize);
                     return stmt.executeQuery(finalQuery);
+                    } finally {
+                        conn.setAutoCommit(autoCommit);
+                    }
                 }
 
                 @Override

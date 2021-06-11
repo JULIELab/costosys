@@ -17,7 +17,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
 
     @BeforeClass
     public static void setUp() throws SQLException {
-        postgres = new PostgreSQLContainer<>();
+        postgres = new PostgreSQLContainer<>("postgres:11.12");
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");

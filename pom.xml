@@ -96,6 +96,20 @@
         <dependency>
             <groupId>de.julielab</groupId>
             <artifactId>jcore-xmi-splitter</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-lang3</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.uima</groupId>
+                    <artifactId>uimaj-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.uima</groupId>
+                    <artifactId>uimafit-core</artifactId>
+                </exclusion>
+            </exclusions>
             <version>2.3.4</version>
         </dependency>
         <dependency>
@@ -136,7 +150,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.2.5.jre7</version>
+            <version>42.2.21.jre7</version>
         </dependency>
         <dependency>
             <groupId>org.elasticsearch.client</groupId>
