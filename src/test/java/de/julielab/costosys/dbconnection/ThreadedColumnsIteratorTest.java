@@ -1,15 +1,11 @@
 package de.julielab.costosys.dbconnection;
 
 import de.julielab.costosys.Constants;
-import org.junit.ClassRule;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
 
@@ -25,7 +21,7 @@ public class ThreadedColumnsIteratorTest {
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", Constants.DEFAULT_DATA_TABLE_NAME);
         assertEquals(10, dbc.getNumRows(Constants.DEFAULT_DATA_TABLE_NAME));
@@ -40,7 +36,7 @@ public class ThreadedColumnsIteratorTest {
 
     @Test
     public void testIterator() {
-        try (CoStoSysConnection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection(true)) {
             de.julielab.costosys.dbconnection.ThreadedColumnsIterator it = new de.julielab.costosys.dbconnection.ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
             int numRetrieved = 0;
             while (it.hasNext()) {
@@ -82,12 +78,12 @@ public class ThreadedColumnsIteratorTest {
         }
         assertEquals(10, numRetrieved);
         it.join();
-        assertEquals(0, dbc.getNumReservedConnections());
+        assertEquals(0, dbc.getNumReservedConnections(false));
     }
 
     @Test
     public void testIteratorWithLimit() {
-        try (CoStoSysConnection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection(true)) {
             de.julielab.costosys.dbconnection.ThreadedColumnsIterator it = new ThreadedColumnsIterator(dbc, conn, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME, 2);
             int numRetrieved = 0;
             while (it.hasNext()) {

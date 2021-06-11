@@ -21,7 +21,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", Constants.DEFAULT_DATA_TABLE_NAME);
         assertEquals(10, dbc.getNumRows(Constants.DEFAULT_DATA_TABLE_NAME));
@@ -36,7 +36,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
 
     @Test
     public void testIterator() {
-        try (CoStoSysConnection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection(true)) {
             de.julielab.costosys.dbconnection.ThreadedColumnsToRetrieveIterator it = new de.julielab.costosys.dbconnection.ThreadedColumnsToRetrieveIterator(dbc, conn, Arrays.<Object[]>asList(new Object[]{"10922238"}), Constants.DEFAULT_DATA_TABLE_NAME, "medline_2016");
             int numRetrieved = 0;
             while (it.hasNext()) {

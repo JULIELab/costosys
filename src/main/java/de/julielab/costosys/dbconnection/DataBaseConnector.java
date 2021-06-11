@@ -86,7 +86,6 @@ public class DataBaseConnector {
     // private FieldConfig fieldConfig;
     // For import
     private static Logger LOG = LoggerFactory.getLogger(DataBaseConnector.class);
-    private static Thread commitThread = null;
     private static LoadingCache<Thread, List<CoStoSysConnection>> connectionCache = CacheBuilder
             .newBuilder()
             // The weak keys are the main reason to use the cache. It allows to garbage collect the threads
@@ -547,14 +546,15 @@ public class DataBaseConnector {
      */
     public List<Object[]> retrieveAndMark(String subsetTableName, String schemaName, String readerComponent,
                                           String hostName, String pid, int limit, String order) throws TableSchemaMismatchException, TableNotFoundException {
+        LOG.trace("Entering retrieveAndMark.");
         checkTableDefinition(subsetTableName, schemaName);
         List<Object[]> ids = new ArrayList<>(limit);
         String sql = null;
         Connection conn = null;
         boolean idsRetrieved = false;
         while (!idsRetrieved) {
-                boolean autoCommit = true;
-            try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+            boolean autoCommit = true;
+            try (CoStoSysConnection costoConn = obtainOrReserveConnection(true)) {
                 FieldConfig fieldConfig = fieldConfigs.get(schemaName);
                 conn = costoConn.getConnection();
 
@@ -617,7 +617,8 @@ public class DataBaseConnector {
                 }
             } finally {
                 try {
-                    conn.setAutoCommit(autoCommit);
+                    if (!conn.isClosed())
+                        conn.setAutoCommit(autoCommit);
                 } catch (SQLException e) {
                     throw new CoStoSysSQLRuntimeException(e);
                 }
@@ -626,6 +627,7 @@ public class DataBaseConnector {
         if (LOG.isTraceEnabled()) {
             LOG.trace("The following IDs were retrieved from table {}: {}", subsetTableName, ids.stream().map(Arrays::toString).collect(Collectors.joining("; ")));
         }
+        LOG.trace("Leaving retrieveAndMark.");
         return ids;
     }
 
@@ -648,7 +650,7 @@ public class DataBaseConnector {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         int rows = 0;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             ResultSet res = conn.getConnection().createStatement().executeQuery(
                     // as we are just looking for any unprocessed documents it
                     // is
@@ -673,7 +675,7 @@ public class DataBaseConnector {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         int rows = 0;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             if (whereCondition != null) {
                 whereCondition = whereCondition.trim();
                 if (!whereCondition.toUpperCase().startsWith("WHERE"))
@@ -704,7 +706,7 @@ public class DataBaseConnector {
     public boolean hasUnfetchedRows(String tableName, String schemaName) {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             ResultSet res = conn.createStatement()
                     .executeQuery("SELECT " + fieldConfig.getPrimaryKeyString() + " FROM " + tableName + " WHERE "
                             + Constants.IN_PROCESS + " = FALSE AND " + Constants.IS_PROCESSED + " = FALSE LIMIT 1");
@@ -767,7 +769,7 @@ public class DataBaseConnector {
      */
     public int markAsProcessed(String table) {
         String sql = "UPDATE " + table + " SET " + Constants.PROCESSED + " = TRUE";
-        try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection costoConn = obtainOrReserveConnection(true)) {
             try {
                 final Statement stmt = costoConn.createStatement();
                 return (int) stmt.executeUpdate(sql);
@@ -812,7 +814,7 @@ public class DataBaseConnector {
         FieldConfig fieldConfig = fieldConfigs.get(schemaName);
 
         int successfulRows = 0;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String where = StringUtils.join(fieldConfig.expandPKNames("%s = ?"), " AND ");
             String fullSQL = sql + where;
             PreparedStatement ps = null;
@@ -868,11 +870,12 @@ public class DataBaseConnector {
      * @throws IllegalArgumentException When <code>referencingTable</code> is <code>null</code>.
      */
     public String getReferencedTable(String referencingTable) {
+        LOG.trace("Entering getReferencedTable.");
         if (referencingTable == null)
             throw new IllegalArgumentException("Name of referencing table may not be null.");
 
         String referencedTable = null;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String pgSchema = dbConfig.getActivePGSchema();
             String tableName = referencingTable;
             if (referencingTable.contains(".")) {
@@ -891,6 +894,7 @@ public class DataBaseConnector {
         } catch (SQLException e1) {
             throw new CoStoSysSQLRuntimeException(e1);
         }
+        LOG.trace("Leaving getReferencedTable.");
         return referencedTable;
     }
 
@@ -923,7 +927,7 @@ public class DataBaseConnector {
      * @param schemaName The name of the PostgreSQL schema to create.
      */
     public void createSchema(String schemaName) {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             createSchema(schemaName, conn.getConnection());
         }
     }
@@ -1009,7 +1013,7 @@ public class DataBaseConnector {
      * @param columnDataType
      */
     public void assureColumnsExist(String tableName, List<String> columnsNames, String columnDataType) {
-        try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection costoConn = obtainOrReserveConnection(true)) {
             costoConn.setAutoCommit(false);
             Map<String, String> foundColumnNames = new HashMap<>();
             List<String> missingColumns = new ArrayList<>();
@@ -1107,7 +1111,7 @@ public class DataBaseConnector {
         } else {
             tableName = qualifiedTable;
         }
-        try (CoStoSysConnection costoConn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection costoConn = obtainOrReserveConnection(true)) {
             String queriedFields = fields != null && fields.length > 0 ? Stream.of(fields).collect(Collectors.joining(",")) : "*";
             // Lowercasing because postgres is lowercasing all table names
             String sql = String.format("SELECT %s FROM information_schema.columns WHERE table_schema = '%s' AND table_name = '%s'", queriedFields, schema, tableName.toLowerCase());
@@ -1168,7 +1172,7 @@ public class DataBaseConnector {
      * @throws CoStoSysSQLRuntimeException If the SQL command fails.
      */
     private void createTable(String tableName, List<String> columns, String comment) {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             StringBuilder sb = new StringBuilder("CREATE TABLE " + tableName + " (");
             for (String column : columns)
                 sb.append(", " + column);
@@ -1333,7 +1337,7 @@ public class DataBaseConnector {
      * @throws SQLException In case something goes wrong.
      */
     public void createIndex(String table, String... columns) throws SQLException {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String sql = String.format("CREATE INDEX %s_idx ON %s (%s)", table.replace(".", ""), table,
                     String.join(",", columns));
             conn.createStatement().execute(sql);
@@ -1422,7 +1426,7 @@ public class DataBaseConnector {
     public boolean isSubsetTable(String table) {
         if (table == null)
             return false;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String pgSchema = dbConfig.getActivePGSchema();
             String tableName = table;
             if (table.contains(".")) {
@@ -1460,7 +1464,7 @@ public class DataBaseConnector {
      * @throws SQLException If an error occurs.
      */
     public boolean dropTable(String table) throws SQLException {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String dataTable = getNextDataTable(table);
             if (dataTable != null) {
                 removeTableFromMirrorSubsetList(conn, table);
@@ -1528,7 +1532,9 @@ public class DataBaseConnector {
      * @return true if the table exists, false otherwise
      */
     public boolean tableExists(String tableName) {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        LOG.trace("Entering tableExists.");
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
+            LOG.trace("Leaving tableExists.");
             return tableExists(conn, tableName);
         }
     }
@@ -1565,7 +1571,7 @@ public class DataBaseConnector {
      * @return true if the schema exists, false otherwise
      */
     public boolean schemaExists(String schemaName) {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             boolean exists = schemaExists(schemaName, conn.getConnection());
 
             return exists;
@@ -1580,7 +1586,7 @@ public class DataBaseConnector {
      */
     public boolean isEmpty(String tableName) {
         String sqlStr = "SELECT * FROM " + tableName + " LIMIT 1";
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             Statement st = conn.createStatement();
             ResultSet res = st.executeQuery(sqlStr);
 
@@ -1592,7 +1598,7 @@ public class DataBaseConnector {
 
     public boolean isEmpty(String tableName, String columnName) {
         String sqlStr = "SELECT " + columnName + " FROM " + tableName + " WHERE " + columnName + " IS NOT NULL LIMIT 1";
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             Statement st = conn.createStatement();
             ResultSet res = st.executeQuery(sqlStr);
 
@@ -1839,7 +1845,7 @@ public class DataBaseConnector {
         String sql = "INSERT INTO " + subsetTable + " (SELECT %s FROM " + superSetTable + " ORDER BY RANDOM() LIMIT "
                 + size + ");";
         sql = String.format(sql, fieldConfig.getPrimaryKeyString());
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             conn.createStatement().execute(sql);
         } catch (SQLException e) {
             LOG.error(sql);
@@ -1885,7 +1891,7 @@ public class DataBaseConnector {
 
         Statement st;
         String sql = null;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             st = conn.createStatement();
             for (int i = 0; i < idSize; i += ID_SUBLIST_SIZE) {
                 List<String> subList = i + ID_SUBLIST_SIZE - 1 < idSize ? values.subList(i, i + ID_SUBLIST_SIZE)
@@ -1932,7 +1938,7 @@ public class DataBaseConnector {
                     + "\" can be created since this scheme does not define a primary key.");
 
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String pkStr = fieldConfig.getPrimaryKeyString();
 
             Statement st = conn.createStatement();
@@ -1974,7 +1980,7 @@ public class DataBaseConnector {
 
 
         String stStr = null;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             if (!whereClause.toUpperCase().startsWith("WHERE"))
                 whereClause = "WHERE " + whereClause;
 
@@ -2033,7 +2039,7 @@ public class DataBaseConnector {
 
         // Add the new subset table to the list of mirror subset tables.
         String sql = null;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             Statement st = conn.createStatement();
             sql = String.format("INSERT INTO %s VALUES ('%s','%s',%b)", Constants.MIRROR_COLLECTION_NAME, supersetTable, subsetTable,
                     performUpdate);
@@ -2116,16 +2122,28 @@ public class DataBaseConnector {
      */
     public void resetSubset(String subsetTableName, boolean whereNotProcessed, boolean whereNoErrors,
                             String lastComponent) {
+        LOG.trace("Entering resetSubset.");
+        try {
+            cleanClosedReservedConnections(connectionCache.get(Thread.currentThread()), Thread.currentThread());
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
         String stStr = null;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
-            boolean autoCommit = conn.getAutoCommit();
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
+            System.out.println("Hier der extra check");
+            try {
+                cleanClosedReservedConnections(connectionCache.get(Thread.currentThread()), Thread.currentThread());
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            }
+            System.out.println("Extra check vorbei");
             conn.setAutoCommit(false);
-            conn.commit();
             Statement st = conn.createStatement();
+            st.addBatch("BEGIN TRANSACTION");
             // We had deadlocks in the DB due to multiple resets in the past. The exclusive lock should
             // avoid that. Also, it is a good idea to lock the table for the reset anyway since it is
             // an operation that changes the complete state of the table.
-            st.execute("LOCK TABLE " + subsetTableName + " IN EXCLUSIVE MODE");
+            st.addBatch("LOCK TABLE " + subsetTableName + " IN EXCLUSIVE MODE");
             List<String> constraints = new ArrayList<>();
             if (whereNotProcessed)
                 constraints.add(Constants.IS_PROCESSED + " = FALSE");
@@ -2141,11 +2159,19 @@ public class DataBaseConnector {
             if (!constraints.isEmpty())
                 stStr += " AND " + constraints.stream().collect(Collectors.joining(" AND "));
             LOG.debug("Resetting table {} with SQL: {}", subsetTableName, stStr);
-            st.execute(stStr);
-            conn.commit();
-            conn.setAutoCommit(autoCommit);
+            st.addBatch(stStr);
+            st.addBatch("END TRANSACTION");
+
+            st.executeBatch();
         } catch (SQLException e) {
             LOG.error("Error executing SQL command: " + stStr, e);
+            throw new CoStoSysSQLRuntimeException(e);
+        }
+        LOG.trace("Leaving resetSubset.");
+        try {
+            cleanClosedReservedConnections(connectionCache.get(Thread.currentThread()), Thread.currentThread());
+        } catch (ExecutionException e) {
+            e.printStackTrace();
         }
     }
 
@@ -2412,7 +2438,7 @@ public class DataBaseConnector {
 
         boolean wasAutoCommit;
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             // Get the list of mirror subsets in which all new primary keys must
@@ -2492,12 +2518,12 @@ public class DataBaseConnector {
             }
             throw new CoStoSysSQLRuntimeException(e);
         } finally {
-            try {
-                if (commitThread != null)
-                    commitThread.join();
-            } catch (InterruptedException e) {
-                throw new CoStoSysRuntimeException(e);
-            }
+//            try {
+//                if (commitThread != null)
+//                    commitThread.join();
+//            } catch (InterruptedException e) {
+//                throw new CoStoSysRuntimeException(e);
+//            }
         }
     }
 
@@ -2544,7 +2570,7 @@ public class DataBaseConnector {
 
         // this is just a default value in case the next line throws an exception
         boolean wasAutoCommit;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             wasAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
 
@@ -2637,13 +2663,13 @@ public class DataBaseConnector {
             }
             throw new CoStoSysSQLRuntimeException(e);
         } finally {
-            try {
-                if (commitThread != null)
-                    commitThread.join();
-
-            } catch (InterruptedException e) {
-                throw new CoStoSysRuntimeException(e);
-            }
+//            try {
+//                if (commitThread != null)
+//                    commitThread.join();
+//
+//            } catch (InterruptedException e) {
+//                throw new CoStoSysRuntimeException(e);
+//            }
         }
     }
 
@@ -2929,7 +2955,7 @@ public class DataBaseConnector {
     private void alterTable(String action, String tableName) {
 
         String sqlString = "ALTER TABLE " + tableName + " " + action;
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             Statement st = conn.createStatement();
             st.execute(sqlString);
         } catch (SQLException e) {
@@ -3202,8 +3228,7 @@ public class DataBaseConnector {
         try {
 
             DBCIterator<byte[][]> it = new DBCIterator<>() {
-
-                private CoStoSysConnection conn = reserveConnection();
+                private CoStoSysConnection conn = reserveConnection(true);
                 private ResultSet rs = doQuery(conn);
                 private boolean hasNext = rs.next();
 
@@ -3217,10 +3242,10 @@ public class DataBaseConnector {
                     // for these IDs.
                     boolean autoCommit = conn.getAutoCommit();
                     try {
-                    conn.setAutoCommit(false);
-                    Statement stmt = conn.createStatement();
-                    stmt.setFetchSize(queryBatchSize);
-                    return stmt.executeQuery(finalQuery);
+                        conn.setAutoCommit(false);
+                        Statement stmt = conn.createStatement();
+                        stmt.setFetchSize(queryBatchSize);
+                        return stmt.executeQuery(finalQuery);
                     } finally {
                         conn.setAutoCommit(autoCommit);
                     }
@@ -3268,6 +3293,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
+                    LOG.trace("Closing connection {}", conn.getConnection());
                     conn.close();
                 }
             };
@@ -3361,7 +3387,7 @@ public class DataBaseConnector {
         }
 
 
-        try (final CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (final CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             // We will set the key-retrieval-statement below to cursor mode by
             // specifying a maximum number of rows to return; for this to work,
             // auto commit must be turned off.
@@ -3438,6 +3464,7 @@ public class DataBaseConnector {
 
                 @Override
                 public void close() {
+                    LOG.trace("Closing connection {}", conn.getConnection());
                     conn.close();
                 }
 
@@ -3487,7 +3514,7 @@ public class DataBaseConnector {
      */
     public long getNumRows(String tableName) {
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             String sql = String.format("SELECT sum(1) as %s FROM %s", Constants.TOTAL, tableName);
             ResultSet resultSet = conn.createStatement().executeQuery(sql);
             if (resultSet.next()) {
@@ -3518,7 +3545,7 @@ public class DataBaseConnector {
 
         SubsetStatus status = new SubsetStatus();
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             StringJoiner joiner = new StringJoiner(",");
             String sumFmtString = "sum(case when %s=TRUE then 1 end) as %s";
             if (statusElementsToReturn.contains(StatusElement.HAS_ERRORS))
@@ -3567,7 +3594,7 @@ public class DataBaseConnector {
      */
     public List<String> getTables() {
         ArrayList<String> tables = new ArrayList<String>();
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             ResultSet res = conn.getMetaData().getTables(null, dbConfig.getActivePGSchema(), null,
                     new String[]{"TABLE"});
             while (res.next())
@@ -3585,7 +3612,7 @@ public class DataBaseConnector {
      * @return - List of String containing name and type of each column
      */
     public List<String> getTableDefinition(String tableName) {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             ArrayList<String> columns = new ArrayList<String>();
             String schema;
             if (tableName.contains(".")) {
@@ -3617,7 +3644,7 @@ public class DataBaseConnector {
      */
     public String getScheme() {
         String scheme = "none";
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             ResultSet res = conn.createStatement().executeQuery("SHOW search_path;");
             if (res.next())
                 scheme = res.getString(1);
@@ -3668,14 +3695,15 @@ public class DataBaseConnector {
      * tables that reference another table, even if those should actually be data
      * tables.
      * <p>
-     * This method makes use of the {@link #obtainOrReserveConnection()} method to obtain a connection in case
+     * This method makes use of the {@link #obtainOrReserveConnection(boolean)} method to obtain a connection in case
      * the current thread has not already obtained one.
      * </p>
      *
      * @param tableName - table to check
      */
     public void checkTableDefinition(String tableName, String schemaName) throws TableSchemaMismatchException, TableNotFoundException {
-        try (CoStoSysConnection connection = obtainOrReserveConnection()) {
+        LOG.trace("Entering checkTableDefinition.");
+        try (CoStoSysConnection connection = obtainOrReserveConnection(true)) {
             if (!tableExists(tableName))
                 throw new TableNotFoundException("The table '" + tableName + "' does not exist.");
             FieldConfig fieldConfig = fieldConfigs.get(schemaName);
@@ -3747,6 +3775,7 @@ public class DataBaseConnector {
                         StringUtils.join(definedColumns, " ") + ". The active table schema is specified in the CoStoSys XML coniguration file.");
             }
         }
+        LOG.trace("Leaving checkTableDefinition.");
     }
 
     /**
@@ -3768,7 +3797,7 @@ public class DataBaseConnector {
         String update = "UPDATE " + subsetTableName + " SET is_processed = TRUE, is_in_process = FALSE" + " WHERE "
                 + whereArgument;
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             conn.setAutoCommit(false);
 
             PreparedStatement processed = conn.prepareStatement(update);
@@ -3808,7 +3837,7 @@ public class DataBaseConnector {
         String whereArgument = StringUtils.join(fieldConfig.expandPKNames("%s = ?"), " AND ");
         String update = "UPDATE " + subsetTableName + " SET has_errors = TRUE, log = ?" + " WHERE " + whereArgument;
 
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             conn.setAutoCommit(false);
 
             PreparedStatement processed = conn.prepareStatement(update);
@@ -3915,7 +3944,7 @@ public class DataBaseConnector {
     }
 
     public boolean isDatabaseReachable() {
-        try (CoStoSysConnection ignored = obtainOrReserveConnection()) {
+        try (CoStoSysConnection ignored = obtainOrReserveConnection(true)) {
             return true;
         } catch (Exception e) {
             LOG.warn("Got error when trying to connect to {}: {}", getDbURL(), e.getMessage());
@@ -4031,7 +4060,7 @@ public class DataBaseConnector {
     }
 
     public void resetSubset(String subsetTableName, List<Object[]> pkValues) {
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             resetSubset(conn, subsetTableName, pkValues);
         }
 
@@ -4042,11 +4071,12 @@ public class DataBaseConnector {
      *
      * @return A connection associated with the current thread.
      * @throws IllegalStateException If there are no reserved connections for the current thread.
-     * @see #obtainOrReserveConnection()
+     * @see #obtainOrReserveConnection(boolean)
      * @see #releaseConnections()
-     * @see #reserveConnection()
+     * @see #reserveConnection(boolean)
      */
-    public CoStoSysConnection obtainConnection() {
+    synchronized public CoStoSysConnection obtainConnection() {
+        logConnectionAllocation();
         Thread currentThread = Thread.currentThread();
         LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
         List<CoStoSysConnection> list;
@@ -4060,7 +4090,13 @@ public class DataBaseConnector {
             throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
         // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
         // a method can be sure that it reserves a connection for its subcalls.
-        final CoStoSysConnection conn = list.get(list.size() - 1);
+        CoStoSysConnection conn = null;
+        for (int i = list.size() - 1; i >= 0; --i) {
+            if (list.get(i).isShared())
+                conn = list.get(i);
+        }
+        if (conn == null)
+            throw new IllegalStateException("There was now sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
         LOG.trace("Obtaining already reserved connection {} for thread {}", conn.getConnection(), currentThread.getName());
         conn.incrementUsageNumber();
         return conn;
@@ -4078,27 +4114,29 @@ public class DataBaseConnector {
      * Guaranteed to return either an already reserved connection or a newly reserved one. The <tt>newlyReserved</tt> property of the returned
      * object indicates whether the returned connection was newly reserved or not (<code>true</code> /
      * <code>false</code>, respectively). To comfortably release the connection only when it was newly reserved, use
-     * {@link #releaseConnection(CoStoSysConnection)} or simply {@link CoStoSysConnection#release()}.
+     * {@link #releaseConnection(CoStoSysConnection)} or simply {@link CoStoSysConnection#decreaseUsageCounter()}.
      * </p>
      *
+     * @param shared Whether or not the returned connection can be shared.
      * @return A pair consisting of connection and the information if it was newly reserved or not.
      * @see #releaseConnection(CoStoSysConnection)
      */
-    public CoStoSysConnection obtainOrReserveConnection() {
+    synchronized public CoStoSysConnection obtainOrReserveConnection(boolean shared) {
         LOG.trace("Connection requested, obtained or newly reserved");
         CoStoSysConnection connection;
-        int reservedConnections = getNumReservedConnections();
-        if (reservedConnections == 0) {
-            connection = reserveConnection();
+        // Only count connections that can be shared
+        int sharableReservedConnections = getNumReservedConnections(true);
+        if (sharableReservedConnections == 0) {
+            connection = reserveConnection(shared);
         } else {
             connection = obtainConnection();
             if (LOG.isTraceEnabled())
-                LOG.trace("There are connections available, obtained {}", connection.getConnection());
+                LOG.trace("There are shareable connections available, obtained {}", connection.getConnection());
         }
         return connection;
     }
 
-    public int getNumReservedConnections() {
+    public int getNumReservedConnections(boolean excludeNonShared) {
         Thread currentThread = Thread.currentThread();
         List<CoStoSysConnection> list;
         try {
@@ -4111,7 +4149,10 @@ public class DataBaseConnector {
             cleanClosedReservedConnections(list, currentThread);
             LOG.trace("After cleaning, {} connections remain for thread {}", list.size(), Thread.currentThread().getName());
         }
-        return list.size();
+        if (excludeNonShared)
+            return (int) list.stream().filter(CoStoSysConnection::isShared).count();
+        else
+            return list.size();
     }
 
     /**
@@ -4120,8 +4161,9 @@ public class DataBaseConnector {
      * @param list The list of reserved connections of a thread.
      */
     private void cleanClosedReservedConnections(List<CoStoSysConnection> list, Thread thread) {
-        LOG.trace("Cleaning already closed connections from the list of reserved connections for thread {}", thread.getName());
+        LOG.trace("Cleaning already closed connections from the list of reserved connections for thread {}.", thread.getName());
         Iterator<CoStoSysConnection> it = list.iterator();
+        int size = list.size();
         while (it.hasNext()) {
             CoStoSysConnection conn = it.next();
             try {
@@ -4133,10 +4175,12 @@ public class DataBaseConnector {
                 LOG.error("Exception occurred when checking if a connection is closed", e);
             }
         }
+        if (size == list.size())
+            LOG.trace("There were no closed connections.");
     }
 
     /**
-     * <p>Only use when you are sure you need this method. Otherwise, use {@link #obtainOrReserveConnection()}</p>
+     * <p>Only use when you are sure you need this method. Otherwise, use {@link #obtainOrReserveConnection(boolean)}</p>
      * <p>
      * Reserves a connection for the current thread. A reserved connection is required by many internal methods that need a database
      * connection. They will aquire it by calling {@link #obtainConnection()}. This helps in reusing the same connection
@@ -4149,19 +4193,13 @@ public class DataBaseConnector {
      * {@link #releaseConnections()} to free the connection.
      * </p>
      *
+     * @param shared
      * @return The newly reserved connection.
      * @see #obtainConnection()
      * @see #releaseConnections()
      */
-    public CoStoSysConnection reserveConnection() {
-        if (LOG.isTraceEnabled()) {
-            final ConcurrentMap<Thread, List<CoStoSysConnection>> map = connectionCache.asMap();
-            StringBuilder sb = new StringBuilder("Current connection allocation:").append("\n");
-            for (Thread t : map.keySet()) {
-                sb.append("Thread '").append(t.getName()).append("':\t\t").append(map.get(t).size()).append("\n");
-            }
-            LOG.trace(sb.toString());
-        }
+    synchronized public CoStoSysConnection reserveConnection(boolean shared) {
+        logConnectionAllocation();
 
         Thread currentThread = Thread.currentThread();
         LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
@@ -4179,21 +4217,32 @@ public class DataBaseConnector {
         if (list.size() == dbConfig.getMaxConnections())
             LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
         Connection conn = getConn();
-        CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, true);
+        CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, true, shared);
         list.add(costoConn);
         LOG.trace("Reserving connection {} for thread \"{}\". This thread has now {} connections reserved.", conn, currentThread.getName(), list.size());
         return costoConn;
+    }
+
+    private void logConnectionAllocation() {
+        if (LOG.isTraceEnabled()) {
+            final ConcurrentMap<Thread, List<CoStoSysConnection>> map = connectionCache.asMap();
+            StringBuilder sb = new StringBuilder("Current connection allocation:").append("\n");
+            for (Thread t : map.keySet()) {
+                sb.append("Thread '").append(t.getName()).append("':\t\t").append(map.get(t).size()).append("\n");
+            }
+            LOG.trace(sb.toString());
+        }
     }
 
     /**
      * Releases all connections associated with the current thread back to the connection pool. After this call,
      * the current thread will not have any reserved connections left.
      *
-     * @see #obtainOrReserveConnection()
-     * @see #reserveConnection()
+     * @see #obtainOrReserveConnection(boolean)
+     * @see #reserveConnection(boolean)
      * @see #obtainConnection()
      */
-    public void releaseConnections() {
+    synchronized public void releaseConnections() {
         Thread currentThread = Thread.currentThread();
         LOG.trace("Releasing all connections held for Thread \"{}\"", currentThread.getName());
         List<CoStoSysConnection> connectionList;
@@ -4205,7 +4254,7 @@ public class DataBaseConnector {
         for (CoStoSysConnection conn : connectionList) {
             try {
                 if (!conn.getConnection().isClosed()) {
-                    LOG.trace("Closing connection {}", conn);
+                    LOG.trace("Closing connection {}", conn.getConnection());
                     conn.getConnection().close();
                 }
             } catch (SQLException e) {
@@ -4224,7 +4273,7 @@ public class DataBaseConnector {
      * @param conn
      * @throws IllegalArgumentException If the given connection is not associated with the current thread.
      */
-    public void releaseConnection(CoStoSysConnection conn) throws SQLException {
+    synchronized public void releaseConnection(CoStoSysConnection conn) throws SQLException {
         Thread currentThread = Thread.currentThread();
         LOG.trace("Releasing connection {} for thread \"{}\"", conn.getConnection(), currentThread.getName());
         List<CoStoSysConnection> connectionList;
@@ -4235,13 +4284,19 @@ public class DataBaseConnector {
         }
         // Note that this will not remove anything if the connection is closed by a different thread than the originally reserving one.
         // This shouldn't be an issue, however, since we clean up closed connections regularly.
+        if (currentThread.getName().equals("main")) {
+            System.out.println("Number of connections for main before removal: " + connectionList.size());
+        }
         connectionList.remove(conn);
+        if (currentThread.getName().equals("main")) {
+            System.out.println("Number of connections for main after removal: " + connectionList.size());
+        }
         conn.getConnection().close();
     }
 
     public Object withConnectionQuery(DbcQuery<?> command) {
         Object ret = null;
-        try (CoStoSysConnection ignored = obtainOrReserveConnection()) {
+        try (CoStoSysConnection ignored = obtainOrReserveConnection(true)) {
             try {
                 ret = command.query(this);
             } catch (Throwable throwable) {
@@ -4268,7 +4323,7 @@ public class DataBaseConnector {
     }
 
     public void withConnectionExecute(DbcExecution command) {
-        try (CoStoSysConnection coStoSysConnection = obtainOrReserveConnection()) {
+        try (CoStoSysConnection coStoSysConnection = obtainOrReserveConnection(true)) {
             try {
                 coStoSysConnection.setAutoCommit(true);
                 command.execute(this);
@@ -4301,7 +4356,7 @@ public class DataBaseConnector {
         Connection sqlConn = null;
         boolean wasAutoCommit = true;
         List<Object[]> ids = new ArrayList<>();
-        try (CoStoSysConnection conn = obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             if (!isSubsetTable(subsetTable))
                 throw new CoStoSysException("The table " + subsetTable + " is not a subset table.");
 

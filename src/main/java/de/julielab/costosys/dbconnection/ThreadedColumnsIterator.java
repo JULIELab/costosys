@@ -169,7 +169,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                             long limit, String schemaName) {
             this.limit = limit;
             closeConnection = conn == null;
-            this.conn = conn != null ? conn : dbc.reserveConnection();
+            this.conn = conn != null ? conn : dbc.reserveConnection(true);
             this.resExchanger = resExchanger;
             this.fieldConfig = dbc.getFieldConfiguration(schemaName);
             statement = "SELECT " + StringUtils.join(fields, ",") + " FROM " + table + " WHERE ";
@@ -238,6 +238,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
 
         @Override
         public void closeConnection() {
+            log.trace("Closing connection {}", conn.getConnection());
             conn.close();
         }
     }
@@ -268,7 +269,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                 this.conn = conn;
                 closeConnection = conn == null;
                 if (conn == null) {
-                    this.conn = dbc.reserveConnection();
+                    this.conn = dbc.reserveConnection(false);
                 }
                 if (conn != null)
                     autoCommit = this.conn.getAutoCommit();
@@ -340,6 +341,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
         @Override
         public void closeConnection() {
             if (closeConnection) {
+                log.trace("Closing connection {}", conn.getConnection());
                 conn.close();
             }
 

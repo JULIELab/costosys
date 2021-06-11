@@ -236,7 +236,7 @@ public class CLI {
             }
             dbc.setActiveTableSchema(tableSchema);
 
-            try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection(true)) {
                 switch (mode) {
                     case QUERY:
                         QueryOptions qo = new QueryOptions();
@@ -483,7 +483,7 @@ public class CLI {
                 if (modes.isEmpty())
                     modes = EnumSet.allOf(StatusElement.class);
 
-                try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
+                try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection(true)) {
                     SubsetStatus status = dbc.status(subsetTableName, modes);
                     System.out.println(status);
                 }
@@ -586,7 +586,7 @@ public class CLI {
             error = true;
         }
         if (!error) {
-            try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection ignored = dbc.obtainOrReserveConnection(true)) {
                 if (!dbc.tableExists(subsetTableName)) {
                     logMessage("No table with the name \"" + subsetTableName + "\" exists, creating new subset table...");
                     dbc.createSubsetTable(subsetTableName, superTableName, numberRefHops, comment);

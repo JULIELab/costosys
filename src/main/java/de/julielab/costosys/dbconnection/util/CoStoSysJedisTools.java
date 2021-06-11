@@ -33,7 +33,7 @@ public class CoStoSysJedisTools {
         boolean useBinaryFormat = true;
         String dataTable = dbc.getNextOrThisDataTable(table);
         log.debug("Fetching a single row from data table {}, column {} in order to determine whether data is in GZIP format", dataTable, column);
-        try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+        try (CoStoSysConnection conn = dbc.obtainOrReserveConnection(true)) {
             ResultSet rs = conn.createStatement().executeQuery(String.format("SELECT %s FROM %s WHERE %s IS NOT NULL LIMIT 1", column, dataTable, column));
             while (rs.next()) {
                 byte[] xmiData = rs.getBytes(column);
@@ -60,7 +60,7 @@ public class CoStoSysJedisTools {
         Map<Integer, String> map = null;
         final String mappingTableName = xmiMetaSchema + "." + XmiSplitConstants.BINARY_MAPPING_TABLE;
         if (dbc.tableExists(mappingTableName)) {
-            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection(true)) {
                 map = new HashMap<>();
                 conn.setAutoCommit(true);
                 Statement stmt = conn.createStatement();
@@ -87,7 +87,7 @@ public class CoStoSysJedisTools {
         Map<String, Boolean> map = null;
         final String mappingTableName = xmiMetaSchema + "." + XmiSplitConstants.BINARY_FEATURES_TO_MAP_TABLE;
         if (dbc.tableExists(mappingTableName)) {
-            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection(true)) {
                 map = new HashMap<>();
                 conn.setAutoCommit(true);
                 Statement stmt = conn.createStatement();
@@ -113,7 +113,7 @@ public class CoStoSysJedisTools {
     public static Map<String, String> getNamespaceMap(DataBaseConnector dbc, String xmiMetaSchema) {
         Map<String, String> map = null;
         if (dbc.tableExists(xmiMetaSchema + "." + XmiSplitConstants.XMI_NS_TABLE)) {
-            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection()) {
+            try (CoStoSysConnection conn = dbc.obtainOrReserveConnection(true)) {
                 map = new HashMap<>();
                 conn.setAutoCommit(true);
                 Statement stmt = conn.createStatement();

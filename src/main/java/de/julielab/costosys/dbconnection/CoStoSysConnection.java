@@ -11,12 +11,22 @@ public class CoStoSysConnection implements AutoCloseable {
     private final static Logger log = LoggerFactory.getLogger(CoStoSysConnection.class);
     private DataBaseConnector dbc;
     private Connection connection;
+    private boolean shared;
     private AtomicInteger numUsing;
 
-    public CoStoSysConnection(DataBaseConnector dbc, Connection connection, boolean newlyReserved) {
+    /**
+     * <p>Indicates if this connection can be shared between different code and threads.</p>
+     * @return True if this connection can be freely shared.
+     */
+    public boolean isShared() {
+        return shared;
+    }
+
+    public CoStoSysConnection(DataBaseConnector dbc, Connection connection, boolean newlyReserved, boolean shared) {
         this.dbc = dbc;
 
         this.connection = connection;
+        this.shared = shared;
         numUsing = new AtomicInteger(1);
         log.trace("Initial usage: Connection {} is now used {} times by thread {}", connection, numUsing.get(), Thread.currentThread().getName());
     }
@@ -27,7 +37,7 @@ public class CoStoSysConnection implements AutoCloseable {
             log.trace("Increased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
     }
 
-    public synchronized void release() throws SQLException {
+    public synchronized void decreaseUsageCounter() throws SQLException {
         final int num = numUsing.decrementAndGet();
         if (log.isTraceEnabled())
             log.trace("Decreased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
@@ -46,7 +56,7 @@ public class CoStoSysConnection implements AutoCloseable {
     @Override
     public void close() {
         try {
-            release();
+            decreaseUsageCounter();
         } catch (SQLException e) {
             throw new CoStoSysSQLRuntimeException(e);
         }

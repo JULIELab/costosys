@@ -38,6 +38,7 @@ public class DataBaseConnectorTest {
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
+        dbc.setMaxConnections(2);
     }
 
     @AfterClass
@@ -62,7 +63,7 @@ public class DataBaseConnectorTest {
 
     @Test
     public void testRetrieveAndMark() throws Exception {
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", Constants.DEFAULT_DATA_TABLE_NAME);
         dbc.createSubsetTable("testsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
@@ -79,6 +80,7 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testJoinTablesWithDataTable() throws Exception {
+        System.out.println("Entering testJoinTablesWithDataTable");
         // Copy the medline_2016 field configuration to create a new configuration with the same fields but without setting the primary key for retrieve and not zipping the
         // XML field for simplicity of the test. It is important to create new Maps for the fields because otherwise we would override the original field configuration.
         List<Map<String, String>> additionalTableConfigFields = dbc.getFieldConfiguration("medline_2016").getFields().stream().map(LinkedHashMap::new).collect(Collectors.toList());
@@ -88,7 +90,7 @@ public class DataBaseConnectorTest {
         dbc.addFieldConfiguration(additionalFieldConfig);
         // Create two new tables with some dummy values for each row in the test data tables. We will then join those values
         // when retrieving data from the data table.
-        try (CoStoSysConnection costoConn = dbc.obtainOrReserveConnection()) {
+        try (CoStoSysConnection costoConn = dbc.obtainOrReserveConnection(true)) {
             dbc.resetSubset("testsubset");
             final List<Object[]> pksInTable = dbc.retrieveAndMark("testsubset", "testJoinTablesWithDataTable", "testhost", "0");
             final Statement stmt = costoConn.createStatement();
@@ -119,7 +121,7 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testStatus() throws SQLException, TableSchemaMismatchException, TableNotFoundException {
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         dbc.createSubsetTable("statussubset", Constants.DEFAULT_DATA_TABLE_NAME, "Test subset");
         dbc.initSubset("statussubset", Constants.DEFAULT_DATA_TABLE_NAME);
         // mark a few documents to be in process
@@ -134,7 +136,7 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testRandomSubset() throws SQLException {
-        try (CoStoSysConnection conn = dbc.reserveConnection()) {
+        try (CoStoSysConnection conn = dbc.reserveConnection(true)) {
             dbc.createSubsetTable("randomsubset", Constants.DEFAULT_DATA_TABLE_NAME, "Random Test Subset");
             dbc.initRandomSubset(10, "randomsubset", Constants.DEFAULT_DATA_TABLE_NAME);
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM randomsubset");
@@ -148,7 +150,7 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testQuerySubset() throws SQLException {
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         dbc.createSubsetTable("querysubset", Constants.DEFAULT_DATA_TABLE_NAME, "");
         dbc.initSubset("querysubset", Constants.DEFAULT_DATA_TABLE_NAME);
         assertThat(dbc.getNumRows("querysubset")).isGreaterThan(0);
@@ -164,12 +166,12 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testMirrorSubset() throws SQLException {
-        CoStoSysConnection conn = dbc.reserveConnection();
+        CoStoSysConnection conn = dbc.reserveConnection(true);
         dbc.defineMirrorSubset("testmirror", Constants.DEFAULT_DATA_TABLE_NAME, true, "A test mirror table");
         assertThat(dbc.getNumRows("testmirror")).isGreaterThan(0);
         Map<String, Boolean> mirrorSubsetNames = dbc.getMirrorSubsetNames(conn, Constants.DEFAULT_DATA_TABLE_NAME);
         assertThat(mirrorSubsetNames.keySet()).contains("public.testmirror");
-        dbc.releaseConnections();
+//        dbc.releaseConnections();
         dbc.dropTable("public.testmirror");
         mirrorSubsetNames = dbc.getMirrorSubsetNames(conn, Constants.DEFAULT_DATA_TABLE_NAME);
         assertThat(mirrorSubsetNames.keySet()).doesNotContain("public.testmirror", "testmirror");
@@ -182,7 +184,7 @@ public class DataBaseConnectorTest {
         Map<String, Object> row = new HashMap<>();
         row.put("docid", "doc1");
         row.put("xmi", "some nonsense");
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         assertThatCode(() -> dbc.importFromRowIterator(Arrays.asList(row).iterator(), "myxmltest", "xmi_text_legacy")).doesNotThrowAnyException();
         dbc.releaseConnections();
         // Iterators use their own connection
@@ -288,7 +290,7 @@ public class DataBaseConnectorTest {
     public void testUpdate() throws Exception {
         // Insert the test data, delete half of it, change the other half, update from the original data, check
         // that everything is as it should be according to the original XML data.
-        CoStoSysConnection conn = dbc.reserveConnection();
+        CoStoSysConnection conn = dbc.reserveConnection(true);
         String dataTableName = "update_test";
         dbc.createTable(dataTableName, "Test data table");
         dbc.importFromXMLFile("src/test/resources/documents/documentSet.xml.gz", dataTableName);

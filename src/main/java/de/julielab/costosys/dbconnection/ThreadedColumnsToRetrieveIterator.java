@@ -328,7 +328,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
          */
         public void run() {
             if (!externalConnectionGiven)
-                this.conn = dbc.obtainOrReserveConnection();
+                this.conn = dbc.obtainOrReserveConnection(true);
             else
                 this.conn.incrementUsageNumber();
             try {
@@ -407,6 +407,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
 
         @Override
         public void closeConnection() {
+            log.trace("Closing connection {}", conn.getConnection());
             conn.close();
         }
     }

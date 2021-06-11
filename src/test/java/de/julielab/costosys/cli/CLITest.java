@@ -44,7 +44,7 @@ public class CLITest {
     @Test
     public void testImport()  {
         assertThatCode(() -> CLI.main(new String[]{"-i", "src/test/resources/pubmedsample18n0001.xml.gz"})).doesNotThrowAnyException();
-        dbc.reserveConnection();
+        dbc.reserveConnection(true);
         assertThat(dbc.tableExists(Constants.DEFAULT_DATA_TABLE_NAME));
         assertThat(dbc.getNumRows(Constants.DEFAULT_DATA_TABLE_NAME)).isEqualTo(177);
     }

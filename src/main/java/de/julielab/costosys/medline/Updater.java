@@ -109,7 +109,7 @@ public class Updater  {
 
 	private static List<File> getUnprocessedMedlineUpdates(File[] updateFiles, DataBaseConnector dbc) {
             List<File> unprocessedFiles = new ArrayList<>();
-		try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection()) {
+		try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
 
             Connection conn = coStoSysConnection.getConnection();
 
@@ -219,7 +219,7 @@ public class Updater  {
 	 * @param dbc
 	 */
 	private void markFileAsImported(File file, DataBaseConnector dbc) {
-        try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection()) {
+        try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
             Connection conn = coStoSysConnection.getConnection();
             String sql = null;
             try {
