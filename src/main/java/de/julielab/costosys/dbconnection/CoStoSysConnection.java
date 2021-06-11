@@ -22,7 +22,7 @@ public class CoStoSysConnection implements AutoCloseable {
         return shared;
     }
 
-    public CoStoSysConnection(DataBaseConnector dbc, Connection connection, boolean newlyReserved, boolean shared) {
+    public CoStoSysConnection(DataBaseConnector dbc, Connection connection, boolean shared) {
         this.dbc = dbc;
 
         this.connection = connection;

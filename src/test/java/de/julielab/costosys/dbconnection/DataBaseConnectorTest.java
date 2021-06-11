@@ -91,6 +91,7 @@ public class DataBaseConnectorTest {
         // Create two new tables with some dummy values for each row in the test data tables. We will then join those values
         // when retrieving data from the data table.
         try (CoStoSysConnection costoConn = dbc.obtainOrReserveConnection(true)) {
+            assertThat(costoConn.getAutoCommit()).isTrue();
             dbc.resetSubset("testsubset");
             final List<Object[]> pksInTable = dbc.retrieveAndMark("testsubset", "testJoinTablesWithDataTable", "testhost", "0");
             final Statement stmt = costoConn.createStatement();
@@ -101,6 +102,7 @@ public class DataBaseConnectorTest {
                 stmt.execute(sql);
             }
             dbc.createTable("additionalTable2", "Another test table for tests with joining to other tables.");
+            assertThat(costoConn.getAutoCommit()).isTrue();
             for (int i = 0; i < pksInTable.size(); i++) {
                 Object[] pk = pksInTable.get(i);
                 String sql = String.format("INSERT INTO %s VALUES('%s','%s')", "additionalTable2", pk[0], "Value" + (i + 42));

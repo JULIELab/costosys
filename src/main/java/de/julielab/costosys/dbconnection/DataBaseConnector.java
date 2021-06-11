@@ -2129,14 +2129,7 @@ public class DataBaseConnector {
             e.printStackTrace();
         }
         String stStr = null;
-        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
-            System.out.println("Hier der extra check");
-            try {
-                cleanClosedReservedConnections(connectionCache.get(Thread.currentThread()), Thread.currentThread());
-            } catch (ExecutionException e) {
-                e.printStackTrace();
-            }
-            System.out.println("Extra check vorbei");
+        try (CoStoSysConnection conn = reserveConnection(false)) {
             conn.setAutoCommit(false);
             Statement st = conn.createStatement();
             st.addBatch("BEGIN TRANSACTION");
@@ -2161,18 +2154,12 @@ public class DataBaseConnector {
             LOG.debug("Resetting table {} with SQL: {}", subsetTableName, stStr);
             st.addBatch(stStr);
             st.addBatch("END TRANSACTION");
-
             st.executeBatch();
         } catch (SQLException e) {
             LOG.error("Error executing SQL command: " + stStr, e);
             throw new CoStoSysSQLRuntimeException(e);
         }
         LOG.trace("Leaving resetSubset.");
-        try {
-            cleanClosedReservedConnections(connectionCache.get(Thread.currentThread()), Thread.currentThread());
-        } catch (ExecutionException e) {
-            e.printStackTrace();
-        }
     }
 
     /**
@@ -4217,7 +4204,12 @@ public class DataBaseConnector {
         if (list.size() == dbConfig.getMaxConnections())
             LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
         Connection conn = getConn();
-        CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, true, shared);
+        try {
+            assert conn.getAutoCommit();
+        } catch (SQLException e) {
+            throw new CoStoSysSQLRuntimeException(e);
+        }
+        CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, shared);
         list.add(costoConn);
         LOG.trace("Reserving connection {} for thread \"{}\". This thread has now {} connections reserved.", conn, currentThread.getName(), list.size());
         return costoConn;
@@ -4284,13 +4276,7 @@ public class DataBaseConnector {
         }
         // Note that this will not remove anything if the connection is closed by a different thread than the originally reserving one.
         // This shouldn't be an issue, however, since we clean up closed connections regularly.
-        if (currentThread.getName().equals("main")) {
-            System.out.println("Number of connections for main before removal: " + connectionList.size());
-        }
         connectionList.remove(conn);
-        if (currentThread.getName().equals("main")) {
-            System.out.println("Number of connections for main after removal: " + connectionList.size());
-        }
         conn.getConnection().close();
     }
 
