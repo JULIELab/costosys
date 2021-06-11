@@ -203,7 +203,7 @@ public class CLI {
                 fileStr = cmd.getOptionValue("u");
             if (cmd.hasOption("im")) {
                 mode = Mode.IMPORT;
-                // For some reasons, multuple versions of some documents have been found in the baseline in the past.
+                // For some reasons, multiple versions of some documents have been found in the baseline in the past.
                 // Just use the update mode.
                 XMLConfiguration importConfig = loadXmlConfiguration(new File(cmd.getOptionValue("im")));
                 fileStr = importConfig.getString(ConfigurationConstants.INSERTION_INPUT);
@@ -256,7 +256,7 @@ public class CLI {
                         break;
 
                     case IMPORT:
-                        doImportOrUpdate(dbc, fileStr, queryStr, superTableName, updateMode);
+                        doImportOrUpdate(dbc, fileStr, superTableName, updateMode);
                         break;
 
                     case SUBSET:
@@ -622,8 +622,8 @@ public class CLI {
         return error;
     }
 
-    private static boolean doImportOrUpdate(DataBaseConnector dbc, String fileStr, String queryStr,
-                                            String superTableName, boolean updateMode) throws SQLException {
+    private static boolean doImportOrUpdate(DataBaseConnector dbc, String fileStr,
+                                            String superTableName, boolean updateMode) {
         boolean error = false;
         if (fileStr != null) {
 

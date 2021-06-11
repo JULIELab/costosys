@@ -30,7 +30,7 @@ public class Updater  {
 	public static final String COLUMN_IS_IMPORTED = "is_imported";
 	public static final String COLUMN_TIMESTAMP = "timestamp_of_import";
 
-	private final String medlineFile;
+	private final String[] medlineFileDirectories;
 
 	private ServiceLoader<IDocumentDeleter> documentDeleterLoader;
 
@@ -38,34 +38,37 @@ public class Updater  {
 
 	public Updater(HierarchicalConfiguration<ImmutableNode> configuration) {
 		this.configuration = configuration;
-		this.medlineFile = configuration.getString(ConfigurationConstants.UPDATE_INPUT);
+//		this.medlineFile = configuration.getString(ConfigurationConstants.UPDATE_INPUT);
+		this.medlineFileDirectories = configuration.getStringArray(ConfigurationConstants.DIRECTORY);
 		documentDeleterLoader = ServiceLoader.load(IDocumentDeleter.class);
 	}
 
 	public void process(DataBaseConnector dbc) throws MedlineUpdateException, IOException {
-		log.info("Updating from {} into database at {}", medlineFile, dbc.getDbURL());
-        File[] updateFiles = getMedlineFiles(medlineFile);
-        if (updateFiles != null && updateFiles.length > 0) {
-			List<File> unprocessedMedlineUpdates = getUnprocessedMedlineUpdates(updateFiles, dbc);
-			configureDocumentDeleters();
-			// Get the names of all deleters to be applied.
-			String[] configuredDeleters = configuration.getStringArray(ConfigurationConstants.DELETER_NAME);
-			for (File file : unprocessedMedlineUpdates) {
-				log.info("Processing file {}.", file.getAbsoluteFile());
-				dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME, true);
-				List<String> pmidsToDelete = getPmidsToDelete(file);
-				for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
-					IDocumentDeleter documentDeleter = it.next();
-					if (!documentDeleter.hasName(configuredDeleters))
-						continue;
-					// This is very hacky. Might work for now, does not scale, of course.
-					if (documentDeleter instanceof MedlineDataTableDocumentDeleter)
-						((MedlineDataTableDocumentDeleter) documentDeleter).setDbc(dbc);
-					documentDeleter.deleteDocuments(pmidsToDelete);
-				}
+		for (String directory : medlineFileDirectories) {
+			log.info("Updating from {} into database at {}", directory, dbc.getDbURL());
+			File[] medlineFiles = getMedlineFiles(directory);
+			if (medlineFiles != null && medlineFiles.length > 0) {
+				List<File> unprocessedMedlineUpdates = getUnprocessedMedlineUpdates(medlineFiles, dbc);
+				configureDocumentDeleters();
+				// Get the names of all deleters to be applied.
+				String[] configuredDeleters = configuration.getStringArray(ConfigurationConstants.DELETER_NAME);
+				for (File file : unprocessedMedlineUpdates) {
+					log.info("Processing file {}.", file.getAbsoluteFile());
+					dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME, true);
+					List<String> pmidsToDelete = getPmidsToDelete(file);
+					for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
+						IDocumentDeleter documentDeleter = it.next();
+						if (!documentDeleter.hasName(configuredDeleters))
+							continue;
+						// This is very hacky. Might work for now, does not scale well, of course.
+						if (documentDeleter instanceof MedlineDataTableDocumentDeleter)
+							((MedlineDataTableDocumentDeleter) documentDeleter).setDbc(dbc);
+						documentDeleter.deleteDocuments(pmidsToDelete);
+					}
 
-				// As last thing, mark the current update file as finished.
-				markFileAsImported(file, dbc);
+					// As last thing, mark the current update file as finished.
+					markFileAsImported(file, dbc);
+				}
 			}
 		}
 	}
