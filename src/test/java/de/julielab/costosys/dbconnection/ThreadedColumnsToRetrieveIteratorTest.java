@@ -1,6 +1,8 @@
 package de.julielab.costosys.dbconnection;
 
 import de.julielab.costosys.Constants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -12,6 +14,7 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 
 public class ThreadedColumnsToRetrieveIteratorTest {
+    private final static Logger log = LoggerFactory.getLogger(ThreadedColumnsToRetrieveIteratorTest.class);
     public static PostgreSQLContainer postgres;
     private static de.julielab.costosys.dbconnection.DataBaseConnector dbc;
 
@@ -32,6 +35,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
     @AfterClass
     public static void shutDown() {
         dbc.close();
+        log.info("There are {} reserved connections.", dbc.getNumReservedConnections(false));
     }
 
     @Test

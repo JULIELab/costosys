@@ -7,6 +7,8 @@ import de.julielab.costosys.dbconnection.util.TableSchemaMismatchException;
 import de.julielab.java.utilities.IOStreamUtilities;
 import de.julielab.xml.JulieXMLConstants;
 import org.postgresql.jdbc.PgSQLXML;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -28,7 +30,7 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.AssertJUnit.assertEquals;
 
 public class DataBaseConnectorTest {
-
+private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.class);
     public static PostgreSQLContainer postgres;
     private static DataBaseConnector dbc;
 
@@ -43,8 +45,9 @@ public class DataBaseConnectorTest {
 
     @AfterClass
     public static void shutdown() {
-        postgres.stop();
         dbc.close();
+        postgres.stop();
+        log.info("There are {} reserved connections.", dbc.getNumReservedConnections(false));
     }
 
 
@@ -80,7 +83,6 @@ public class DataBaseConnectorTest {
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testJoinTablesWithDataTable() throws Exception {
-        System.out.println("Entering testJoinTablesWithDataTable");
         // Copy the medline_2016 field configuration to create a new configuration with the same fields but without setting the primary key for retrieve and not zipping the
         // XML field for simplicity of the test. It is important to create new Maps for the fields because otherwise we would override the original field configuration.
         List<Map<String, String>> additionalTableConfigFields = dbc.getFieldConfiguration("medline_2016").getFields().stream().map(LinkedHashMap::new).collect(Collectors.toList());

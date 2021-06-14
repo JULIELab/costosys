@@ -6,6 +6,8 @@ import de.julielab.costosys.dbconnection.DataBaseConnector;
 import de.julielab.costosys.dbconnection.SubsetStatus;
 import de.julielab.jcore.db.test.DBTestUtils;
 import org.apache.commons.configuration2.ex.ConfigurationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -19,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.testng.AssertJUnit.assertEquals;
 
 public class CLITest {
-
+private final static Logger log = LoggerFactory.getLogger(CLITest.class);
     public static PostgreSQLContainer postgres;
     private static DataBaseConnector dbc;
 
@@ -39,6 +41,7 @@ public class CLITest {
     public static void shutdown(){
         dbc.close();
         postgres.stop();
+        log.info("There are {} reserved connections.", dbc.getNumReservedConnections(false));
     }
 
     @Test
