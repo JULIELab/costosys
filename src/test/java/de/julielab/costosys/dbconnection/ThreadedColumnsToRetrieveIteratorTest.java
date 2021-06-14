@@ -23,6 +23,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
         postgres = new PostgreSQLContainer<>("postgres:11.12");
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        log.info("Running test setup. There are {} reserved connections.", dbc.getNumReservedConnections(false));
         dbc.setActiveTableSchema("medline_2016");
         dbc.reserveConnection(true);
         dbc.createTable(Constants.DEFAULT_DATA_TABLE_NAME, "Test data table");
