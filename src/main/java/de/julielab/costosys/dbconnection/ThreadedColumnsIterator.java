@@ -221,10 +221,10 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                 sql.delete(sql.length() - 4, sql.length()); // Remove trailing
                 // " OR "
                 String limit = this.limit > 0 ? " LIMIT " + this.limit : "";
-                rs = st.executeQuery(sql.toString() + limit);
+                rs = st.executeQuery(sql + limit);
             } catch (SQLException e) {
                 e.printStackTrace();
-                System.err.println(sql.toString());
+                System.err.println(sql);
             } catch (ArrayIndexOutOfBoundsException e) {
                 LOG.error("Configuration file and query are incompatible.");
                 String wrongLine = "";
