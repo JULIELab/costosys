@@ -33,14 +33,13 @@ public class MedlineDataTableDocumentDeleter implements IDocumentDeleter {
 	}
 
 	@Override
-	public void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration)
-			throws MedlineDocumentDeletionException {
+	public void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration) {
 		
 	}
 
 	@Override
-	public Set<String> getNames() {
-		return new HashSet<>(Arrays.asList("medline", getClass().getCanonicalName()));
+	public String getName() {
+		return "database";
 	}
 
 

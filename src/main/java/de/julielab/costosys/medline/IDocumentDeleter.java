@@ -12,16 +12,15 @@ public interface IDocumentDeleter {
 
 	void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration) throws MedlineDocumentDeletionException;
 
-	default boolean hasName(String... names) {
-		Set<String> givenNames = getNames();
+	default boolean isOneOf(String... names) {
 		for (int i = 0; i < names.length; i++) {
 			String name = names[i];
-			if (givenNames.contains(name))
+			if (name.equals(getName()))
 				return true;
 		}
 		return false;
 	}
 
-	Set<String> getNames();
+	String getName();
 
 }

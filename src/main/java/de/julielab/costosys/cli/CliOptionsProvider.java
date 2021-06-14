@@ -117,9 +117,8 @@ public class CliOptionsProvider {
         OptionGroup modes = new OptionGroup();
 
         modes.addOption(buildOption("i", "import", "Import data into the _data table", "file/dir to import"));
-        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table. The parameter is a XML file holding information about the PubMed/MEDLINE baseline location. It is the same file format used for the -um mode.", "XML MEDLINE configuration"));
+        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table. The parameter is an XML file holding information about the PubMed/MEDLINE XML file location in the format downloaded directly from the MEDLINE FTP server.  Keeps track of already applied imported files via an internal table", "MEDLINE import/update XML configuration"));
         modes.addOption(buildOption("u", "update", "Update _data table", "file/dir to update from"));
-        modes.addOption(buildOption("um", "updatemedline", "Update _data table from PubMed/MEDLINE update files. Keeps track of already applied update files via an internal table. The parameter is a XML file holding information about the update file location. It is the same file format used for the -im mode.", "XML MEDLINE configuration"));
         modes.addOption(buildOption("s", "subset",
                 "Define a subset table; use -f, -o, -a, -m, -w or -r to specify the subsets source. Use -z to specify the referenced data table, defaults to _data.",
                 "name of the new subset table"));
@@ -147,6 +146,7 @@ public class CliOptionsProvider {
         modes.addOption(OptionBuilder.create("q"));
 
         modes.addOption(buildOption("h", "help", "Displays all possible parameters."));
+        modes.addOption(buildOption("vn", "version", "Prints the program version."));
         modes.addOption(buildOption("t", "tables", "Displays all tables in the active scheme."));
 
         modes.addOption(buildOption("td", "tabledefinition", "Displays the columns of a table.", "the table"));

@@ -24,6 +24,7 @@ import de.julielab.costosys.dbconnection.util.CoStoSysException;
 import de.julielab.costosys.dbconnection.util.CoStoSysRuntimeException;
 import de.julielab.costosys.medline.ConfigurationConstants;
 import de.julielab.costosys.medline.Updater;
+import de.julielab.java.utilities.IOStreamUtilities;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
 import org.apache.commons.cli.*;
@@ -122,10 +123,17 @@ public class CLI {
                 mode = Mode.DEFAULT_CONFIG;
             if (cmd.hasOption("dt"))
                 mode = Mode.DROP_TABLE;
-            if (cmd.hasOption("um"))
-                mode = Mode.UPDATE_MEDLINE;
+            if (cmd.hasOption("im"))
+                mode = Mode.IMPORT_UPDATE_MEDLINE;
             if (cmd.hasOption("mp"))
                 mode = Mode.MARK_PROCESSED;
+            if (cmd.hasOption("vn"))
+                mode = Mode.PRINT_VERSION;
+
+            if (mode == Mode.PRINT_VERSION) {
+                printVersion();
+                return;
+            }
 
             // authentication
             // configuration file
@@ -201,14 +209,6 @@ public class CLI {
                 fileStr = cmd.getOptionValue("i");
             if (fileStr == null)
                 fileStr = cmd.getOptionValue("u");
-            if (cmd.hasOption("im")) {
-                mode = Mode.IMPORT;
-                // For some reasons, multiple versions of some documents have been found in the baseline in the past.
-                // Just use the update mode.
-                XMLConfiguration importConfig = loadXmlConfiguration(new File(cmd.getOptionValue("im")));
-                fileStr = importConfig.getString(ConfigurationConstants.INSERTION_INPUT);
-                updateMode = true;
-            }
 
             String superTableName = cmd.getOptionValue("z");
             if (superTableName == null)
@@ -356,8 +356,8 @@ public class CLI {
                         dropTableInteractively(dbc, cmd.getOptionValue("dt"));
                         break;
 
-                    case UPDATE_MEDLINE:
-                        Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("um"))));
+                    case IMPORT_UPDATE_MEDLINE:
+                        Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("im"))));
                         updater.process(dbc);
                         break;
 
@@ -375,6 +375,13 @@ public class CLI {
         } catch (ParseException e) {
             LOG.error("Can't parse arguments: " + e.getMessage());
             printHelp(options);
+        }
+    }
+
+    private static void printVersion() throws IOException {
+        try (InputStream versionFileStream = CLI.class.getResourceAsStream("/version.txt")) {
+            String version = IOStreamUtilities.getStringFromInputStream(versionFileStream).trim();
+            System.out.println(version);
         }
     }
 
@@ -948,6 +955,6 @@ public class CLI {
     }
 
     private enum Mode {
-        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, UPDATE_MEDLINE, MARK_PROCESSED
+        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, IMPORT_UPDATE_MEDLINE, MARK_PROCESSED, PRINT_VERSION
     }
 }

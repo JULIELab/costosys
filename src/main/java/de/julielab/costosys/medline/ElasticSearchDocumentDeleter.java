@@ -81,8 +81,8 @@ public class ElasticSearchDocumentDeleter implements IDocumentDeleter {
     }
 
     @Override
-    public Set<String> getNames() {
-        return new HashSet<>(Arrays.asList("elasticsearch", getClass().getCanonicalName()));
+    public String getName() {
+        return "elasticsearch";
     }
 
 }
