@@ -762,6 +762,7 @@ public class CLI {
                                 + "<PubmedArticleSet>", bw);
                     }
 
+//                    new BinaryDataHandler(dbc, "public", Collections.emptySet())
                     while (it.hasNext()) {
                         byte[][] idAndXML = it.next();
                         if (outfile != null) {

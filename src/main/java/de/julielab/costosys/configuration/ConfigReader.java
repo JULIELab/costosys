@@ -1,16 +1,19 @@
 package de.julielab.costosys.configuration;
 
 import com.ximpleware.*;
+import de.julielab.costosys.dbconnection.util.CoStoSysException;
 import de.julielab.xml.JulieXMLTools;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * This class reads an xml configuration file, containing the definition of a
@@ -36,12 +39,16 @@ public class ConfigReader {
 	private static final String XPATH_CONF_DB = "//DBConnection";
 	private static final String XPATH_CONF_SCHEMA = "//tableSchema";
 
+	public static final String XPATH_TYPE_SYSTEM = "//TypeSystem";
+	public static final String XPATH_TYPE_SYSTEM_FILE = "//TypeSystem/file";
+
 	private static final int INDEX_SCHEMA = 0;
 	private static final int INDEX_DB = 1;
-	private static final int INDEX_PG_SCHEMA = 2;
-	private static final int INDEX_MAX_CONNS = 3;
-	private static final int INDEX_DATA_TABLE = 4;
-	private static final int INDEX_DATA_SCHEMA = 5;
+	private static final int INDEX_TYPE_SYSTEM = 2;
+	private static final int INDEX_PG_SCHEMA = 3;
+	private static final int INDEX_MAX_CONNS = 4;
+	private static final int INDEX_DATA_TABLE = 5;
+	private static final int INDEX_DATA_SCHEMA = 6;
 
 	private static final String XPATH_DATA_TABLE = "//dataTable";
 	private static final String XPATH_DATA_SCHEMA = "//activeDataPostgresSchema";
@@ -54,6 +61,7 @@ public class ConfigReader {
 	private byte[] mergedConfigData;
 	private String activeDataSchema;
 	private List<String> schemaNames;
+	private List<File> typeSystemFiles;
 
 	public ConfigReader(InputStream def) {
 		try {
@@ -73,7 +81,6 @@ public class ConfigReader {
 			
 			schemaNames = getAllSchemaNames(mergedConfigData);
 
-			// Creating
 			fieldConfigs = new FieldConfigurationManager();
 			for (String schemaName : schemaNames)
 				fieldConfigs.put(schemaName, new FieldConfig(mergedConfigData,
@@ -85,6 +92,8 @@ public class ConfigReader {
 					XPATH_DATA_SCHEMA);
 			activeSchemaName = ConfigBase.getActiveConfig(mergedConfigData,
 					XPATH_ACTIVE_TABLE_SCHEMA);
+
+			typeSystemFiles = getTypeSystemPaths(mergedConfigData).stream().map(File::new).collect(Collectors.toList());
 			
 			LOG.debug("Active data table: {}", activeDataTable);
 			LOG.debug("Active Postgres data schema: {}", activeDataSchema);
@@ -93,6 +102,8 @@ public class ConfigReader {
 			e.printStackTrace();
 		} catch (VTDException e) {
 			LOG.error("Parsing of configuration file failed:", e);
+		} catch (CoStoSysException e) {
+			e.printStackTrace();
 		}
 
 	}
@@ -121,6 +132,10 @@ public class ConfigReader {
 			schemaNames.add(schemaNameAP.evalXPathToString());
 
 		return schemaNames;
+	}
+
+	public List<File> getTypeSystemFiles() {
+		return typeSystemFiles;
 	}
 
 	/**
@@ -168,6 +183,14 @@ public class ConfigReader {
 			}
 		}
 
+		// Add type system connection data to the default configuration.
+		if (userDefs[INDEX_TYPE_SYSTEM] != null) {
+			ap.selectXPath(XPATH_TYPE_SYSTEM);
+			if (ap.evalXPath() != -1) {
+				xm.insertAfterHead(userDefs[INDEX_TYPE_SYSTEM]);
+			}
+		}
+
 		// Get active table schema, active data postgres schema, active DB
 		// connection and more
 		// from the user configuration, if these declarations exist.
@@ -190,8 +213,6 @@ public class ConfigReader {
 			int newTextIndex = JulieXMLTools.setElementText(vn, ap, xm,
 					XPATH_ACTIVE_DB, activeConfs[INDEX_DB]);
 			if (newTextIndex == -1) {
-//				throw new IllegalStateException(
-//						"Unexpected error: The default configuration does not define an active database connection. Please define an active DB connection in your user configuration.");
 				LOG.warn("The default configuration does not define an active database connection.");
 			}
 			
@@ -207,8 +228,6 @@ public class ConfigReader {
 			int newTextIndex = JulieXMLTools.setElementText(vn, ap, xm,
 					XPATH_MAX_CONNS, activeConfs[INDEX_MAX_CONNS]);
 			if (newTextIndex == -1) {
-//				throw new IllegalStateException(
-//						"Unexpected error: The default configuration does not define a maximal number of database connections. Please define a maximal number of connections in your user configuration.");
 				LOG.warn("Unexpected error: The default configuration does not define a maximal number of database connections");
 			}
 		}
@@ -299,7 +318,7 @@ public class ConfigReader {
 		VTDNav vn = vg.getNav();
 		AutoPilot ap = new AutoPilot(vn);
 
-		String[] activeConfigurations = new String[6];
+		String[] activeConfigurations = new String[7];
 		ap.selectXPath(XPATH_ACTIVE_PG_SCHEMA);
 		activeConfigurations[INDEX_PG_SCHEMA] = ap.evalXPathToString();
 
@@ -333,7 +352,7 @@ public class ConfigReader {
 	private static byte[][] extractConfigData(byte[] confData)
 			throws VTDException {
 		// Allocate space for schema and DB connection data.
-		byte[][] configData = new byte[2][];
+		byte[][] configData = new byte[3][];
 		VTDGen vg = new VTDGen();
 		vg.setDoc(confData);
 		vg.parse(true);
@@ -358,7 +377,44 @@ public class ConfigReader {
 			configData[INDEX_DB] = fragment.getBytes();
 		}
 
+		// Get type system file data
+		ap.selectXPath(XPATH_TYPE_SYSTEM);
+
+		if (ap.evalXPath() != -1) {
+			String fragment = JulieXMLTools.getFragment(vn, JulieXMLTools.CONTENT_FRAGMENT,
+					true);
+			configData[INDEX_TYPE_SYSTEM] = fragment.getBytes();
+		}
+
 		return configData;
+	}
+
+	/**
+	 * Returns the type system files from the configuration.
+	 *
+	 * @param mergedConfigData
+	 * @return - String representations of the elements
+	 * @throws XPathParseException
+	 */
+	protected List<String> getTypeSystemPaths(byte[] mergedConfigData)
+			throws XPathParseException, CoStoSysException {
+		try {
+			List<String> elementStrings = new ArrayList<>();
+
+			VTDGen vg = new VTDGen();
+			vg.setDoc(mergedConfigData);
+			vg.parse(false);
+			VTDNav vn = vg.getNav();
+			AutoPilot ap = new AutoPilot(vn);
+			ap.selectXPath(XPATH_TYPE_SYSTEM_FILE);
+			while(ap.evalXPath() != -1) {
+				String string = JulieXMLTools.getElementText(vn);
+				elementStrings.add(string);
+			}
+			return elementStrings;
+		} catch (Exception e) {
+			throw new CoStoSysException(e);
+		}
 	}
 
 	/**

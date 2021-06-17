@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseConnectorConfiguration>
+	<TypeSystem>
+		<file>tsone.xml</file>
+		<file>tstwo.xml</file>
+		<file>tsthree.xml</file>
+	</TypeSystem>
+</databaseConnectorConfiguration>

@@ -46,6 +46,7 @@ public class FieldConfig extends ConfigBase {
     private List<Map<String, String>> fields;
     private Map<String, Map<String, String>> fieldNameMap;
     private String forEachXPath;
+    private boolean binary;
     private String[] primaryKey;
     private String[] columns;
     private String timestampFieldName = null;
@@ -175,6 +176,9 @@ public class FieldConfig extends ConfigBase {
             int attrIndex = vn.getAttrVal(JulieXMLConstants.FOR_EACH);
             if (attrIndex != -1)
                 forEachXPath = vn.toString(attrIndex);
+            int attrIndexB = vn.getAttrVal(JulieXMLConstants.BINARY);
+            if (attrIndexB != -1)
+                binary = Boolean.parseBoolean(vn.toString(attrIndexB));
         }
 
         ap.selectXPath(String.format(XPATH_CONF_FIELD_TEMPLATE, activeSchemeName));

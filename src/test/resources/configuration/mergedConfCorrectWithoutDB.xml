@@ -37,4 +37,5 @@
 				url="jdbc:postgresql://old.mcdonald.has-a-farm.mow/barn"></DBConnection>
 		</DBConnections>
 	</DBConnectionInformation>
+	<TypeSystem/>
 </databaseConnectorConfiguration>

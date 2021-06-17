@@ -26,4 +26,5 @@
 		
 		</DBConnections>
 	</DBConnectionInformation>
+	<TypeSystem/>
 </databaseConnectorConfiguration>

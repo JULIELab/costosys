@@ -44,4 +44,8 @@
 		
 		</DBConnections>
 	</DBConnectionInformation>
+	<TypeSystem>
+		<file>tsone.xml</file>
+		<file>tstwo.xml</file>
+	</TypeSystem>
 </databaseConnectorConfiguration>

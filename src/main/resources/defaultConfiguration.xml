@@ -70,6 +70,18 @@
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
+			<tableSchema name="xmi_pubmed_binary" binary="true">
+				<field name="pmid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
+			</tableSchema>
+			<tableSchema name="xmi_pmc_binary" forEach=".">
+				<field name="pmcid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
+			</tableSchema>
 			<!-- While this exact schema is not used any more for an actual table, the schema name
 			is often used in different places of JeDIS code. We keep it for compatibility. -->
 			<tableSchema name="xmi_text" forEach=".">
@@ -115,4 +127,5 @@
 			<DBConnection url="" name="" />
 		</DBConnections>
 	</DBConnectionInformation>
+	<TypeSystem/>
 </databaseConnectorConfiguration>

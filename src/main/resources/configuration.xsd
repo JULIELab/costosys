@@ -45,7 +45,8 @@
 				<xs:element ref="field" minOccurs="0" maxOccurs="unbounded"/>
 			</xs:sequence>
 			<xs:attribute name="name" type="xs:string" use="required"></xs:attribute>
-			<xs:attribute name="forEach" type="xs:string" use="required"></xs:attribute>
+			<xs:attribute name="forEach" type="xs:string" use="optional"></xs:attribute>
+			<xs:attribute name="binary" type="xs:boolean" use="optional"></xs:attribute>
 		</xs:complexType>
 	</xs:element>
 
@@ -98,6 +99,16 @@
 		<xs:complexType>
 			<xs:attribute name="name" type="xs:string" use="required"></xs:attribute>
 			<xs:attribute name="url" type="xs:string" use="required"></xs:attribute>
+		</xs:complexType>
+	</xs:element>
+
+	<!-- UIMA type system file locations for decoding of JeDIS binary XMI format -->
+
+	<xs:element name="TypeSystem">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="file" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
 		</xs:complexType>
 	</xs:element>
 
