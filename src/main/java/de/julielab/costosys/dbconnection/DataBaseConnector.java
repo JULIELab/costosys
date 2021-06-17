@@ -4090,6 +4090,14 @@ public class DataBaseConnector {
     }
 
     /**
+     * <p>This is just a convenience method for {@link #obtainOrReserveConnection(boolean)} with the parameter set to <tt>true</tt>.</p>
+     * @return A database connection to the database as configured in the configuration.
+     */
+    synchronized public CoStoSysConnection obtainOrReserveConnection() {
+        return obtainOrReserveConnection(true);
+    }
+
+    /**
      * <p>
      * This is the preferred way to obtain a database connection. It will reuse an existing connection or get a new one if required.
      * </p>
