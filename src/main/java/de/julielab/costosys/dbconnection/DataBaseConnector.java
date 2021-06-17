@@ -4091,9 +4091,10 @@ public class DataBaseConnector {
 
     /**
      * <p>This is just a convenience method for {@link #obtainOrReserveConnection(boolean)} with the parameter set to <tt>true</tt>.</p>
+     *
      * @return A database connection to the database as configured in the configuration.
      */
-    synchronized public CoStoSysConnection obtainOrReserveConnection() {
+    public CoStoSysConnection obtainOrReserveConnection() {
         return obtainOrReserveConnection(true);
     }
 
@@ -4172,6 +4173,15 @@ public class DataBaseConnector {
         }
         if (size == list.size())
             LOG.trace("There were no closed connections.");
+    }
+
+    /**
+     * <p>Just delegates to <tt>reserveConnection(true)</tt>.</p>
+     *
+     * @return A newly created, sharable connection.
+     */
+    public CoStoSysConnection reserveConnection() {
+        return reserveConnection(true);
     }
 
     /**
