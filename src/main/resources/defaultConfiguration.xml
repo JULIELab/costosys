@@ -84,6 +84,21 @@
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
+			<!-- This was the schema used when the base document and its annotations went in different tables. Some
+			tests still use it so we keep it around.-->
+			<tableSchema name="xmi_text_legacy" forEach=".">
+				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="xmi" type="xml" retrieve="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
+			</tableSchema>
+			<!-- This was the schema used when the base document and its annotations went in different tables-->
+			<tableSchema name="xmi_text_gzip_legacy" forEach=".">
+				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="xmi" type="bytea" 	retrieve="true" gzip="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
+			</tableSchema>
 			<!-- This schema is supposed to only get the max_xmi_id field value of
 				the xmi_text_gzip schema. -->
 			<tableSchema name="max_id_addition" forEach=".">

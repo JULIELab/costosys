@@ -183,7 +183,7 @@ private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.
     }
 
     @Test
-    public void testXmlData() throws UnsupportedEncodingException {
+    public void testXmlData() {
         dbc.withConnectionExecute(c -> c.createTable("myxmltest", "xmi_text_legacy", "XML Test Table"));
         Map<String, Object> row = new HashMap<>();
         row.put("docid", "doc1");
