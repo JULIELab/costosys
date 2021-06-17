@@ -85,6 +85,8 @@ public final class Constants {
 
 	public static final String LAST_COMPONENT = "last_component";
 
+	public static final String LAST_DOCUMENT_TEXT_HASH = "last_document_text_hash";
+
 	public static final String HOST_NAME = "host_name";
 
 	public static final String PROCESSING_TIMESTAMP = "processing_timestamp";

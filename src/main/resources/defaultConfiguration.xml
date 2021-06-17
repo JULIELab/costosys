@@ -58,6 +58,20 @@
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
 				<field name="xmi" type="bytea" retrieve="true" gzip="true"/>
 			</tableSchema>
+			<tableSchema name="xmi_pubmed" forEach=".">
+				<field name="pmid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
+			</tableSchema>
+			<tableSchema name="xmi_pmc" forEach=".">
+				<field name="pmcid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
+			</tableSchema>
+			<!-- While this exact schema is not used any more for an actual table, the schema name
+			is often used in different places of JeDIS code. We keep it for compatibility. -->
 			<tableSchema name="xmi_text" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
 				<field name="base_document" type="xml" retrieve="true" notNull="true"/>
@@ -70,41 +84,12 @@
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
-			<!-- This was the schema used when the base document and its annotations went in different tables-->
-			<tableSchema name="xmi_text_legacy" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="xmi" type="xml" retrieve="true"/>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
-			</tableSchema>
-			<!-- This was the schema used when the base document and its annotations went in different tables-->
-			<tableSchema name="xmi_annotation" forEach=".">
-				<field name="docid" type="xml" primaryKey="true" retrieve="false"/>
-				<field name="xmi" type="xml" retrieve="true"/>
-			</tableSchema>
-			<!-- This was the schema used when the base document and its annotations went in different tables-->
-			<tableSchema name="xmi_text_gzip_legacy" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="xmi" type="bytea" 	retrieve="true" gzip="true"/>
-				<field name="max_xmi_id" type="integer" xpath="." retrieve="true"/>
-				<field name="sofa_mapping" type="text" xpath="." retrieve="true"/>
-			</tableSchema>
 			<!-- This schema is supposed to only get the max_xmi_id field value of
 				the xmi_text_gzip schema. -->
 			<tableSchema name="max_id_addition" forEach=".">
 				<field name="docid" type="text" primaryKey="true" retrieve="false"/>
 				<field name="xmi" type="bytea" retrieve="false" gzip="true"/>
 				<field name="max_xmi_id" type="integer" retrieve="true"/>
-			</tableSchema>
-			<tableSchema name="xmi_annotation_gzip" forEach=".">
-				<field name="docid" type="text" primaryKey="true" retrieve="false"/>
-				<field name="xmi" type="bytea" retrieve="true" gzip="true"/>
-			</tableSchema>
-			<tableSchema name="dbc_junit_gzip" forEach="/MedlineCitationSet/MedlineCitation">
-				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
-					retrieve="true"/>
-				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
-					retrieve="true" gzip="true"/>
 			</tableSchema>
 		</tableSchemas>
 	</DBSchemaInformation>
