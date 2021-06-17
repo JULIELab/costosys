@@ -4102,7 +4102,7 @@ public class DataBaseConnector {
      * This is the preferred way to obtain a database connection. It will reuse an existing connection or get a new one if required.
      * </p>
      * <p>A reserved connection is required by many internal methods that need a database
-     * connection. They will aquire it by calling {@link #obtainConnection()}. This helps in reusing the same connection
+     * connection. They will acquire it by calling {@link #obtainConnection()}. This helps in reusing the same connection
      * for multiple tasks within a single thread. This also helps to avoid deadlocks where a single thread requests
      * multiple connections from the connection pool in method subcalls, blocking itself.</p>
      * <p>
