@@ -4132,6 +4132,10 @@ public class DataBaseConnector {
         return connection;
     }
 
+    public int getNumReservedConnections() {
+        return getNumReservedConnections(false);
+    }
+
     public int getNumReservedConnections(boolean excludeNonShared) {
         Thread currentThread = Thread.currentThread();
         List<CoStoSysConnection> list;
