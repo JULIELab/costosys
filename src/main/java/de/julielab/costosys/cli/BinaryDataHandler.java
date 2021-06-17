@@ -45,7 +45,7 @@ public class BinaryDataHandler {
      * @param typeSystemFiles UIMA type system descriptor files that hold the types contained in the loaded data.
      * @throws CoStoSysException If the type systems cannot be loaded.
      */
-    public BinaryDataHandler(DataBaseConnector dbc, String xmiMetaSchema, Set<String> annotationColumnsToLoad, List<Path> typeSystemFiles) throws CoStoSysException {
+    public BinaryDataHandler(DataBaseConnector dbc, String xmiMetaSchema, Set<String> annotationColumnsToLoad, List<File> typeSystemFiles) throws CoStoSysException {
         try {
             this.dbc = dbc;
             this.xmiMetaSchema = xmiMetaSchema;
@@ -58,10 +58,9 @@ public class BinaryDataHandler {
         }
     }
 
-    private TypeSystem readTypeSystem(List<Path> typeSystemFiles) throws UIMAException {
+    private TypeSystem readTypeSystem(List<File> typeSystemFiles) throws UIMAException {
         List<File> concreteFiles = new ArrayList<>();
-        for (Path p : typeSystemFiles) {
-            File f = p.toFile();
+        for (File f : typeSystemFiles) {
             if (f.isDirectory())
                 Arrays.stream(f.listFiles((file, name) -> name.endsWith("xml"))).forEach(concreteFiles::add);
             else

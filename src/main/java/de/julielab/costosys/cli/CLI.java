@@ -762,7 +762,10 @@ public class CLI {
                                 + "<PubmedArticleSet>", bw);
                     }
 
-//                    new BinaryDataHandler(dbc, "public", Collections.emptySet())
+                    BinaryDataHandler binaryDataHandler = null;
+                    if (dbc.getActiveTableFieldConfiguration().isBinary()) {
+                        binaryDataHandler = new BinaryDataHandler(dbc, "public", Collections.emptySet(), dbc.getConfig().getTypeSystemFiles());
+                    }
                     while (it.hasNext()) {
                         byte[][] idAndXML = it.next();
                         if (outfile != null) {
@@ -792,7 +795,10 @@ public class CLI {
                             StringBuilder sb = new StringBuilder();
                             if (pubmedArticleSet)
                                 sb.append("<PubmedArticle>\n");
-                            sb.append(new String(idAndXML[1], "UTF-8"));
+                            if (!dbc.getActiveTableFieldConfiguration().isBinary())
+                                sb.append(new String(idAndXML[1], "UTF-8"));
+                            else
+                                sb.append(binaryDataHandler.decodeBinaryXmiData(idAndXML));
                             if (pubmedArticleSet)
                                 sb.append("\n</PubmedArticle>");
                             print(sb.toString(), bw);
@@ -817,6 +823,8 @@ public class CLI {
                     }
                 }
             } catch (IOException e) {
+                e.printStackTrace();
+            } catch (CoStoSysException e) {
                 e.printStackTrace();
             } finally {
                 try {

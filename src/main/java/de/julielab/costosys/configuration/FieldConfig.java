@@ -163,6 +163,10 @@ public class FieldConfig extends ConfigBase {
         return name;
     }
 
+    public boolean isBinary() {
+        return binary;
+    }
+
     private void buildFields(byte[] mergedConfData, String activeSchemeName)
             throws ParseException, XPathParseException, XPathEvalException, NavException {
         VTDGen vg = new VTDGen();
