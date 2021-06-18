@@ -36,7 +36,7 @@ private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.
 
     @BeforeClass
     public static void setUp() {
-        postgres = new PostgreSQLContainer<>("postgres:11.12");
+        postgres = new PostgreSQLContainer<>("postgres:"+DataBaseConnector.POSTGRES_VERSION);
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");

@@ -6,6 +6,7 @@ import com.google.common.cache.LoadingCache;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
+import com.zaxxer.hikari.pool.HikariPool;
 import de.julielab.costosys.Constants;
 import de.julielab.costosys.cli.TableNotFoundException;
 import de.julielab.costosys.configuration.*;
@@ -52,6 +53,11 @@ import java.util.zip.ZipException;
  * @author hellrich, faessler
  */
 public class DataBaseConnector {
+
+    /**
+     * The PostgreSQL version against which this version of CoStoSys is developed and tested.
+     */
+    public static final String POSTGRES_VERSION = "11.12";
 
     public static final String DEFAULT_PIPELINE_STATE = "<none>";
     /**
@@ -320,6 +326,10 @@ public class DataBaseConnector {
         dbConfig.setMaxConnections(num);
     }
 
+    public int getMaxConnections() {
+        return dbConfig.getMaxConnections();
+    }
+
     /**
      * @return A Connection to the database.
      */
@@ -357,10 +367,14 @@ public class DataBaseConnector {
                     if (LOG.isTraceEnabled()) {
                         String poolName = dataSource.getPoolName();
                         HikariPoolMXBean poolProxy = dataSource.getHikariPoolMXBean();
+                        int maxConnections = dbConfig.getMaxConnections();
+                        if (poolProxy instanceof HikariPool)
+                            maxConnections = ((HikariPool) poolProxy).config.getMaximumPoolSize();
                         int totalConnections = poolProxy.getTotalConnections();
                         int idleConnections = poolProxy.getIdleConnections();
                         int activeConnections = poolProxy.getActiveConnections();
                         int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
+                        LOG.trace("Pool {} has {} maximum connections", poolName, maxConnections);
                         LOG.trace("Pool {} has {} total connections", poolName, totalConnections);
                         LOG.trace("Pool {} has {} idle connections left", poolName, idleConnections);
                         LOG.trace("Pool {} has {} active connections", poolName, activeConnections);
@@ -368,7 +382,6 @@ public class DataBaseConnector {
 
                     }
                     conn = dataSource.getConnection();
-                    // conn = DriverManager.getConnection(fullURI);
                     LOG.trace("SQL connection obtained.");
                     Statement stm = conn.createStatement();
                     if (!schemaExists(dbConfig.getActivePGSchema(), conn))
@@ -382,13 +395,17 @@ public class DataBaseConnector {
                     LOG.warn("Could not obtain a database connection within the timeout for thread {}. Trying again. Number of try: {}", Thread.currentThread().getName(), ++retries);
                     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
                     try {
-                        String poolNameStr = ((HikariDataSource) dataSource).getPoolName();
+                        String poolNameStr = dataSource.getPoolName();
                         ObjectName poolName = new ObjectName("com.zaxxer.hikari:type=Pool (" + poolNameStr + ")");
                         HikariPoolMXBean poolProxy = JMX.newMXBeanProxy(mBeanServer, poolName, HikariPoolMXBean.class);
+                        int maxConnections = dbConfig.getMaxConnections();
+                        if (poolProxy instanceof HikariPool)
+                            maxConnections = ((HikariPool) poolProxy).config.getMaximumPoolSize();
                         int totalConnections = poolProxy.getTotalConnections();
                         int idleConnections = poolProxy.getIdleConnections();
                         int activeConnections = poolProxy.getActiveConnections();
                         int threadsAwaitingConnection = poolProxy.getThreadsAwaitingConnection();
+                        LOG.warn("Pool {} has {} maximum connections", poolName, maxConnections);
                         LOG.warn("Pool {} has {} total connections", poolName, totalConnections);
                         LOG.warn("Pool {} has {} idle connections left", poolName, idleConnections);
                         LOG.warn("Pool {} has {} active connections", poolName, activeConnections);

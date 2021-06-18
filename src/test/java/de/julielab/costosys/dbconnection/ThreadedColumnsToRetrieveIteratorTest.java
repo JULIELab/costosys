@@ -20,7 +20,7 @@ public class ThreadedColumnsToRetrieveIteratorTest {
 
     @BeforeClass
     public static void setUp() throws SQLException {
-        postgres = new PostgreSQLContainer<>("postgres:11.12");
+        postgres = new PostgreSQLContainer<>("postgres:"+DataBaseConnector.POSTGRES_VERSION);
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         log.info("Running test setup. There are {} reserved connections.", dbc.getNumReservedConnections(false));

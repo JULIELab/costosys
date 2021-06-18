@@ -20,7 +20,7 @@ public class ThreadedColumnsIteratorTest {
 
     @BeforeClass
     public static void setUp() throws SQLException {
-        postgres = new PostgreSQLContainer<>("postgres:11.12");
+        postgres = new PostgreSQLContainer<>("postgres:"+DataBaseConnector.POSTGRES_VERSION);
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setMaxConnections(2);
