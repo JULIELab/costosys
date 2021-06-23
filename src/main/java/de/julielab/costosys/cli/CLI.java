@@ -37,6 +37,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -129,6 +132,8 @@ public class CLI {
                 mode = Mode.MARK_PROCESSED;
             if (cmd.hasOption("vn"))
                 mode = Mode.PRINT_VERSION;
+            if (cmd.hasOption("dr"))
+                mode = Mode.DELETE_ROWS;
 
             if (mode == Mode.PRINT_VERSION) {
                 printVersion();
@@ -365,6 +370,11 @@ public class CLI {
                         setProcessed(dbc, cmd.getOptionValue("mp"), fileStr);
                         break;
 
+                    case DELETE_ROWS:
+                        Path idFilePath = Path.of(cmd.getOptionValue("dr"));
+                        deleteRows(dbc, idFilePath, superTableName);
+                        break;
+
                     case ERROR:
                         break;
                 }
@@ -376,6 +386,12 @@ public class CLI {
             LOG.error("Can't parse arguments: " + e.getMessage());
             printHelp(options);
         }
+    }
+
+    private static void deleteRows(DataBaseConnector dbc, Path idFilePath, String superTableName) throws IOException {
+        List<String> ids = Files.readAllLines(idFilePath, StandardCharsets.UTF_8);
+        LOG.info("Deleting {} rows from {}.", ids.size(), superTableName);
+        dbc.deleteFromTableSimplePK(superTableName, ids);
     }
 
     private static void printVersion() throws IOException {
@@ -964,6 +980,6 @@ public class CLI {
     }
 
     private enum Mode {
-        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, IMPORT_UPDATE_MEDLINE, MARK_PROCESSED, PRINT_VERSION
+        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, DELETE_ROWS, IMPORT_UPDATE_MEDLINE, MARK_PROCESSED, PRINT_VERSION
     }
 }

@@ -43,7 +43,7 @@ public class CliOptionsProvider {
                 "name of the superset table"));
         options.addOption(buildOption("v", "verbose", "Activate verbose informational ouput of the tool's actions"));
 
-        options.addOption(buildOption("d", "delimiter", "Display a line of \"-\" as delimiter between the results."));
+        options.addOption(buildOption("d", "delimiter", "For use with -q. Display a line of \"-\" as delimiter between the results."));
         options.addOption(buildOption("pas", "pubmedarticleset",
                 "For use with -q. The queried documents will be interpreted as Medline XML documents and will be enclosed in PubmedArticleSet."));
         options.addOption(buildOption("out", "out",
@@ -135,17 +135,13 @@ public class CliOptionsProvider {
                         "The report can be customized using the -he, -isp, -inp, -to and -slc switches", "subset table name"));
         modes.addOption(buildOption("mp", "mark-processed", "Sets the is_processed state of a subset table to true. The -f argument can be used to deliver a file that lists document primary keys, one per line. If such a file is given, only the entries in the file are marked as processed.", "the subset table name"));
 
-        OptionBuilder.withLongOpt("query");
-        OptionBuilder.withDescription("Query a table (default: " + Constants.DEFAULT_DATA_TABLE_NAME
+        modes.addOption(buildOption("q", "query", "Query a table (default: " + Constants.DEFAULT_DATA_TABLE_NAME
                 + ") for XMLs. You can enter the primary keys directly or use -f to specify a file. If you define none of both, the whole table will be returned.\n"
                 + "Use -d to display delimiters between the results.\n"
                 + "Use -z to specify the target table. If the table is a subset, only documents in this subset will be returned.\n"
                 + "Use -l to set a limit of returned documents.\n"
                 + "Use -x to specify an XPath expression go extract specific parts of the queried XML documents.\n"
-                + "Use -out to save the query results to file.");
-        OptionBuilder.hasOptionalArg();
-        OptionBuilder.withArgName("your query");
-        modes.addOption(OptionBuilder.create("q"));
+                + "Use -out to save the query results to file.", "your query"));
 
         modes.addOption(buildOption("h", "help", "Displays all possible parameters."));
         modes.addOption(buildOption("vn", "version", "Prints the program version."));
@@ -161,6 +157,9 @@ public class CliOptionsProvider {
 
         modes.addOption(buildOption("lts", "listtableschemas",
                 "Displays all table schema names in the configuration. The showed name index can be used as value for the -ts option."));
+
+        modes.addOption(buildOption("dr", "delete-rows", "Deletes rows from tables whose IDs are in the delivered file in the specified table.\n" +
+                "Use -z to specify the target table.", "ID file"));
 
         modes.setRequired(true);
 
