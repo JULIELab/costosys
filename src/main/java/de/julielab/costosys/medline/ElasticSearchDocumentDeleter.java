@@ -17,10 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class ElasticSearchDocumentDeleter implements IDocumentDeleter {
     public static final String TO_DELETE_QUEUE = "elasticSearchDocumentDeletionQueue.lst";
@@ -35,7 +32,7 @@ public class ElasticSearchDocumentDeleter implements IDocumentDeleter {
     private HierarchicalConfiguration<ImmutableNode> deletionConfiguration;
 
     @Override
-    public void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration) throws MedlineDocumentDeletionException {
+    public void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration) throws DocumentDeletionException {
         this.deletionConfiguration = deletionConfiguration;
         try {
             String clusterName = deletionConfiguration.getString(CONFKEY_CLUSTER);
@@ -45,7 +42,7 @@ public class ElasticSearchDocumentDeleter implements IDocumentDeleter {
             client = new PreBuiltTransportClient(settings)
                     .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(host), port));
         } catch (UnknownHostException e) {
-            throw new MedlineDocumentDeletionException(e);
+            throw new DocumentDeletionException(e);
         }
     }
 

@@ -4,13 +4,17 @@ import org.apache.commons.configuration2.HierarchicalConfiguration;
 import org.apache.commons.configuration2.tree.ImmutableNode;
 
 import java.util.List;
-import java.util.Set;
 
 public interface IDocumentDeleter {
 
 	void deleteDocuments(List<String> docIds);
 
-	void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration) throws MedlineDocumentDeletionException;
+	/**
+	 * Passes the XML contents of the <tt>deletion</tt> element.
+	 * @param deletionConfiguration The subconfiguration where the <tt>deletion</tt> element for the current deleter is the root.
+	 * @throws DocumentDeletionException If configuration fails.
+	 */
+	void configure(HierarchicalConfiguration<ImmutableNode> deletionConfiguration) throws DocumentDeletionException;
 
 	default boolean isOneOf(String... names) {
 		for (int i = 0; i < names.length; i++) {

@@ -17,109 +17,36 @@ import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class Updater  {
+import static de.julielab.java.utilities.ConfigurationUtilities.dot;
 
-	private final static Logger log = LoggerFactory.getLogger(Updater.class);
+public class Updater {
 
-	/**
-	 * Name of the table that keeps track of already imported and finished Medline
-	 * update files. Value: {@value #UPDATE_TABLE}.
-	 */
-	public static final String UPDATE_TABLE = Constants.DEFAULT_DATA_SCHEMA + "._medline_update_files";
+    /**
+     * Name of the table that keeps track of already imported and finished Medline
+     * update files. Value: {@value #UPDATE_TABLE}.
+     */
+    public static final String UPDATE_TABLE = Constants.DEFAULT_DATA_SCHEMA + "._medline_update_files";
+    public static final String COLUMN_FILENAME = "update_file_name";
+    public static final String COLUMN_IS_IMPORTED = "is_imported";
+    public static final String COLUMN_TIMESTAMP = "timestamp_of_import";
+    private final static Logger log = LoggerFactory.getLogger(Updater.class);
+    private final String[] medlineFileDirectories;
 
-	public static final String COLUMN_FILENAME = "update_file_name";
-	public static final String COLUMN_IS_IMPORTED = "is_imported";
-	public static final String COLUMN_TIMESTAMP = "timestamp_of_import";
+    private ServiceLoader<IDocumentDeleter> documentDeleterLoader;
 
-	private final String[] medlineFileDirectories;
+    private HierarchicalConfiguration<ImmutableNode> configuration;
 
-	private ServiceLoader<IDocumentDeleter> documentDeleterLoader;
-
-	private HierarchicalConfiguration<ImmutableNode> configuration;
-
-	public Updater(HierarchicalConfiguration<ImmutableNode> configuration) {
-		this.configuration = configuration;
-		this.medlineFileDirectories = configuration.getStringArray(ConfigurationConstants.DIRECTORY);
-		documentDeleterLoader = ServiceLoader.load(IDocumentDeleter.class);
-		log.info("Initialized MEDLINE Updater with file directories {} and document deleters {}.", this.medlineFileDirectories, configuration.getStringArray(ConfigurationConstants.DELETER_NAME));
-		log.debug("Loaded the following document deleters: {}", documentDeleterLoader.stream().map(d -> d.get().getName()).collect(Collectors.joining(", ")));
-	}
-
-	public void process(DataBaseConnector dbc) throws MedlineUpdateException, IOException {
-		for (String directory : medlineFileDirectories) {
-			log.info("Updating from {} into database at {}", directory, dbc.getDbURL());
-			File[] medlineFiles = getMedlineFiles(directory);
-			if (medlineFiles != null && medlineFiles.length > 0) {
-				List<File> unprocessedMedlineUpdates = getUnprocessedMedlineUpdates(medlineFiles, dbc);
-				configureDocumentDeleters();
-				// Get the names of all deleters to be applied.
-				String[] configuredDeleters = configuration.getStringArray(ConfigurationConstants.DELETER_NAME);
-				for (File file : unprocessedMedlineUpdates) {
-					log.info("Processing file {}.", file.getAbsoluteFile());
-					dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME, true);
-					List<String> pmidsToDelete = getPmidsToDelete(file);
-					Set<IDocumentDeleter> appliedDeleters = new HashSet<>();
-					for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
-						IDocumentDeleter documentDeleter = it.next();
-						log.debug("Checking if deleter {} is part of the deleter configuration.", documentDeleter.getName());
-						if (!documentDeleter.isOneOf(configuredDeleters)) {
-							log.debug("Skipping document deleter {}.", documentDeleter.getName());
-							continue;
-						}
-						log.debug("Applying document deleter {}.", documentDeleter.getName());
-						// This is very hacky. Might work for now, does not scale well, of course.
-						if (documentDeleter instanceof MedlineDataTableDocumentDeleter)
-							((MedlineDataTableDocumentDeleter) documentDeleter).setDbc(dbc);
-						documentDeleter.deleteDocuments(pmidsToDelete);
-						appliedDeleters.add(documentDeleter);
-					}
-					if (appliedDeleters.size() < configuredDeleters.length)
-						throw new IllegalStateException("Not all document deleters could be applied. Configured deleters were " + Arrays.toString(configuredDeleters) + " but applied were only " + (appliedDeleters.isEmpty() ? "none" : appliedDeleters.stream().map(IDocumentDeleter::getName).collect(Collectors.joining(", "))));
-
-					// As last thing, mark the current update file as finished.
-					markFileAsImported(file, dbc);
-				}
-			}
-		}
-	}
-
-    protected File[] getMedlineFiles(String medlinePathString) throws FileNotFoundException {
-        File medlinePath = new File(medlinePathString);
-        if (!medlinePath.exists())
-            throw new FileNotFoundException("File \"" + medlinePathString + "\" was not found.");
-        if (!medlinePath.isDirectory())
-            return new File[] { medlinePath };
-        File[] medlineFiles = medlinePath.listFiles(file -> {
-            String filename = file.getName();
-            return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip");
-        });
-        // Check whether anything has been read.
-        if (medlineFiles == null || medlineFiles.length == 0) {
-            log.info("No (g)zipped files found in directory {}. No update will be performed.", medlinePathString);
-        }
-        return medlineFiles;
+    public Updater(HierarchicalConfiguration<ImmutableNode> configuration) {
+        this.configuration = configuration;
+        this.medlineFileDirectories = configuration.getStringArray(ConfigurationConstants.DIRECTORY);
+        documentDeleterLoader = ServiceLoader.load(IDocumentDeleter.class);
+        log.info("Initialized MEDLINE Updater with file directories {} and document deleters {}.", this.medlineFileDirectories, configuration.getStringArray(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER)));
+        log.debug("Loaded the following document deleters: {}", documentDeleterLoader.stream().map(d -> d.get().getName()).collect(Collectors.joining(", ")));
     }
 
-	private void configureDocumentDeleters() throws MedlineDocumentDeletionException {
-		if (configuration.containsKey(ConfigurationConstants.DELETION)) {
-			// Get all deletion configurations.
-			List<HierarchicalConfiguration<ImmutableNode>> deletionConfigs = configuration
-					.configurationsAt(ConfigurationConstants.DELETION);
-			// For each deletion configuration, search for the deleter specified in the
-			// respective configuration and set the deletion sub configuration.
-			for (HierarchicalConfiguration<ImmutableNode> deletionConf : deletionConfigs) {
-				for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext();) {
-					IDocumentDeleter documentDeleter = it.next();
-					if (documentDeleter.isOneOf(deletionConf.getString(ConfigurationConstants.DELETER_NAME)))
-						documentDeleter.configure(deletionConf);
-				}
-			}
-		}
-	}
-
-	private static List<File> getUnprocessedMedlineUpdates(File[] updateFiles, DataBaseConnector dbc) {
-            List<File> unprocessedFiles = new ArrayList<>();
-		try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
+    private static List<File> getUnprocessedMedlineUpdates(File[] updateFiles, DataBaseConnector dbc) {
+        List<File> unprocessedFiles = new ArrayList<>();
+        try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
 
             Connection conn = coStoSysConnection.getConnection();
 
@@ -179,56 +106,133 @@ public class Updater  {
                     if (unprocessedFileSet.contains(updateFile.getName()))
                         unprocessedFiles.add(updateFile);
                 }
-                // And now a last but very important step: Sort the list to be in
-                // the correct update-sequence. If we don't, it can happen that we
-                // process a newer update before an older which will then result in
-                // deprecated documents kept in the database.
-                Collections.sort(unprocessedFiles, new Comparator<File>() {
-
-                    @Override
-                    public int compare(File f1, File f2) {
-                        // The files are named like "medline13n0792.xml.zip", i.e.
-                        // their sequence number if part of the file name. We just
-                        // have to sort by string comparison.
-                        return f1.getName().compareTo(f2.getName());
-                    }
-                });
             } catch (SQLException e) {
                 e.printStackTrace();
             }
         }
-		return unprocessedFiles;
-	}
+        return unprocessedFiles;
+    }
 
-	private static List<String> getPmidsToDelete(File file) {
-		List<String> pmidsToDelete = new ArrayList<String>();
-		String forEachXpath = "/PubmedArticleSet/DeleteCitation/PMID";
-		List<Map<String, String>> fields = new ArrayList<Map<String, String>>();
-		Map<String, String> field = new HashMap<String, String>();
-		field.put(JulieXMLConstants.NAME, Constants.PMID_FIELD_NAME);
-		field.put(JulieXMLConstants.XPATH, ".");
-		fields.add(field);
+    private static List<String> getPmidsToDelete(File file) {
+        List<String> pmidsToDelete = new ArrayList<String>();
+        String forEachXpath = "/PubmedArticleSet/DeleteCitation/PMID";
+        List<Map<String, String>> fields = new ArrayList<Map<String, String>>();
+        Map<String, String> field = new HashMap<String, String>();
+        field.put(JulieXMLConstants.NAME, Constants.PMID_FIELD_NAME);
+        field.put(JulieXMLConstants.XPATH, ".");
+        fields.add(field);
 
-		int bufferSize = 1000;
-		Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(file.getAbsolutePath(), bufferSize,
-				forEachXpath, fields, false);
+        int bufferSize = 1000;
+        Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(file.getAbsolutePath(), bufferSize,
+                forEachXpath, fields, false);
 
-		while (it.hasNext()) {
-			Map<String, Object> row = it.next();
-			String pmid = (String) row.get(Constants.PMID_FIELD_NAME);
-			pmidsToDelete.add(pmid);
-		}
-		return pmidsToDelete;
-	}
+        while (it.hasNext()) {
+            Map<String, Object> row = it.next();
+            String pmid = (String) row.get(Constants.PMID_FIELD_NAME);
+            pmidsToDelete.add(pmid);
+        }
+        return pmidsToDelete;
+    }
 
-	/**
-	 * Marks the file <code>file</code> as being imported in the database table
-	 * {@link #UPDATE_TABLE}.
-	 * 
-	 * @param file
-	 * @param dbc
-	 */
-	private void markFileAsImported(File file, DataBaseConnector dbc) {
+    public void process(DataBaseConnector dbc, boolean ignoreAlreadyProcessed) throws MedlineUpdateException, IOException {
+        if (ignoreAlreadyProcessed)
+            log.info("Ignoring update file processing state in the database and processing all files in the directories {}.", medlineFileDirectories);
+        configureDocumentDeleters();
+        for (String directory : medlineFileDirectories) {
+            log.info("Updating from {} into database at {}", directory, dbc.getDbURL());
+            File[] medlineFiles = getMedlineFiles(directory);
+            if (medlineFiles != null && medlineFiles.length > 0) {
+                List<File> unprocessedMedlineUpdates = ignoreAlreadyProcessed ? Arrays.asList(medlineFiles) : getUnprocessedMedlineUpdates(medlineFiles, dbc);
+                // A very important step: Sort the list to be in
+                // the correct update-sequence. If we don't, it can happen that we
+                // process a newer update before an older which will then result in
+                // deprecated documents kept in the database.
+                // The files are named like "medline13n0792.xml.zip", i.e.
+                // their sequence number if part of the file name. We just
+                // have to sort by string comparison.
+                Collections.sort(unprocessedMedlineUpdates, Comparator.comparing(File::getName));
+                // Get the names of all deleters to be applied.
+                String[] configuredDeleters = configuration.getStringArray(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER));
+                for (File file : unprocessedMedlineUpdates) {
+                    log.info("Processing file {}.", file.getAbsoluteFile());
+                    dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME, true);
+                    List<String> pmidsToDelete = getPmidsToDelete(file);
+                    Set<IDocumentDeleter> appliedDeleters = new HashSet<>();
+                    for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
+                        IDocumentDeleter documentDeleter = it.next();
+                        log.debug("Checking if deleter {} is part of the deleter configuration.", documentDeleter.getName());
+                        if (!documentDeleter.isOneOf(configuredDeleters)) {
+                            log.debug("Skipping document deleter {}.", documentDeleter.getName());
+                            continue;
+                        }
+                        log.debug("Applying document deleter {}.", documentDeleter.getName());
+                        // This is very hacky. Might work for now, does not scale well, of course.
+                        if (documentDeleter instanceof SimplePKDataTableDocumentDeleter)
+                            ((SimplePKDataTableDocumentDeleter) documentDeleter).setDbc(dbc);
+                        documentDeleter.deleteDocuments(pmidsToDelete);
+                        appliedDeleters.add(documentDeleter);
+                    }
+                    if (appliedDeleters.size() < configuredDeleters.length)
+                        throw new IllegalStateException("Not all document deleters could be applied. Configured deleters were " + Arrays.toString(configuredDeleters) + " but applied were only " + (appliedDeleters.isEmpty() ? "none" : appliedDeleters.stream().map(IDocumentDeleter::getName).collect(Collectors.joining(", "))));
+
+                    // As last thing, mark the current update file as finished.
+                    markFileAsImported(file, dbc);
+                }
+            }
+        }
+    }
+
+    protected File[] getMedlineFiles(String medlinePathString) throws FileNotFoundException {
+        File medlinePath = new File(medlinePathString);
+        if (!medlinePath.exists())
+            throw new FileNotFoundException("File \"" + medlinePathString + "\" was not found.");
+        if (!medlinePath.isDirectory())
+            return new File[]{medlinePath};
+        File[] medlineFiles = medlinePath.listFiles(file -> {
+            String filename = file.getName();
+            return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip");
+        });
+        // Check whether anything has been read.
+        if (medlineFiles == null || medlineFiles.length == 0) {
+            log.info("No (g)zipped files found in directory {}. No update will be performed.", medlinePathString);
+        }
+        return medlineFiles;
+    }
+
+    private void configureDocumentDeleters() throws DocumentDeletionException {
+        log.trace("Configuring document deleters");
+        // We cannot test for the DELETION element because there is no value bound to it; it is only part of
+        // the path to longer configuration keys.
+        if (configuration.containsKey(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER))) {
+            // Get all deletion configurations.
+            List<HierarchicalConfiguration<ImmutableNode>> deletionConfigs = configuration
+                    .configurationsAt(ConfigurationConstants.DELETION);
+            log.trace("Found {} deleter configurations.", deletionConfigs.size());
+            // For each deletion configuration, search for the deleter specified in the
+            // respective configuration and set the deletion sub configuration.
+            for (HierarchicalConfiguration<ImmutableNode> deletionConf : deletionConfigs) {
+                for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
+                    IDocumentDeleter documentDeleter = it.next();
+                    log.trace("Configuring deleter {}", documentDeleter.getName());
+                    if (documentDeleter.isOneOf(deletionConf.getString(ConfigurationConstants.DELETER)))
+                        documentDeleter.configure(deletionConf);
+                    else
+                        log.trace("Skipping the configuration of {} because it is not specified in the configuration.", documentDeleter.getName());
+                }
+            }
+        } else {
+            log.trace("No document deleters were specified in the configuration.");
+        }
+    }
+
+    /**
+     * Marks the file <code>file</code> as being imported in the database table
+     * {@link #UPDATE_TABLE}.
+     *
+     * @param file
+     * @param dbc
+     */
+    private void markFileAsImported(File file, DataBaseConnector dbc) {
         try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
             Connection conn = coStoSysConnection.getConnection();
             String sql = null;
@@ -242,5 +246,5 @@ public class Updater  {
                 log.error("SQL command was: {}", sql);
             }
         }
-	}
+    }
 }

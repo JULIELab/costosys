@@ -109,6 +109,8 @@ public class CliOptionsProvider {
                 buildOption("j", "journals", "Define a subset by providing a file with journal names.", "file"));
         exclusive.addOption(
                 buildOption("l", "limit", "For use with -q. Restricts the number of documents returned.", "limit"));
+        exclusive.addOption(
+                buildOption("iap", "ignore-already-processed", "For use with -im. Indicates that all update files in the configuration should be processed regardless of whether they are already marked as processed in the database update table."));
 
         options.addOptionGroup(exclusive);
     }

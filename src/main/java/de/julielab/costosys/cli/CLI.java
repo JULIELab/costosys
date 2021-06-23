@@ -358,7 +358,7 @@ public class CLI {
 
                     case IMPORT_UPDATE_MEDLINE:
                         Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("im"))));
-                        updater.process(dbc);
+                        updater.process(dbc, cmd.hasOption("iap"));
                         break;
 
                     case MARK_PROCESSED:

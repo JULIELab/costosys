@@ -1,2 +1,2 @@
 de.julielab.costosys.medline.ElasticSearchDocumentDeleter
-de.julielab.costosys.medline.MedlineDataTableDocumentDeleter
+de.julielab.costosys.medline.SimplePKDataTableDocumentDeleter
