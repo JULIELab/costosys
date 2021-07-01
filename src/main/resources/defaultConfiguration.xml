@@ -70,14 +70,20 @@
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
-			<tableSchema name="xmi_pubmed_binary" binary="true">
-				<field name="pmid" type="text" primaryKey="true" retrieve="true"/>
-				<field name="base_document" type="bytea" gzip="true" retrieve="true" notNull="true"/>
+			<tableSchema name="xmi_pmc_gzip" forEach=".">
+				<field name="pmcid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="xml" retrieve="true" notNull="true" gzip="true"/>
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_pmc_binary" binary="true">
 				<field name="pmcid" type="text" primaryKey="true" retrieve="true"/>
+				<field name="base_document" type="bytea" gzip="true" retrieve="true" notNull="true"/>
+				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
+				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
+			</tableSchema>
+			<tableSchema name="xmi_pubmed_binary" binary="true">
+				<field name="pmid" type="text" primaryKey="true" retrieve="true"/>
 				<field name="base_document" type="bytea" gzip="true" retrieve="true" notNull="true"/>
 				<field name="max_xmi_id" type="integer" xpath="." retrieve="true" notNull="true"/>
 				<field name="sofa_mapping" type="text" xpath="." retrieve="true" notNull="true"/>
@@ -122,7 +128,7 @@
 	</DBSchemaInformation>
 	<DBConnectionInformation>
 		<activeDBConnection></activeDBConnection>
-		<maxActiveDBConnections>1</maxActiveDBConnections>
+		<maxActiveDBConnections>2</maxActiveDBConnections>
 		<DBConnections>
 			<DBConnection url="" name="" />
 		</DBConnections>
