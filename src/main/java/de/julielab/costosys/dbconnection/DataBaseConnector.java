@@ -1493,6 +1493,18 @@ public class DataBaseConnector {
     }
 
     /**
+     * Drops the empty Postgres schema with given name.
+     * @param schema The schema to be dropped.
+     */
+    public boolean dropSchema(String schema) throws SQLException{
+        try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
+            Statement stmt = conn.createStatement();
+            String sql = "DROP SCHEMA " + schema;
+            return stmt.execute(sql);
+        }
+    }
+
+    /**
      * <p>Removes an entry from the table listing mirror subsets, located at {@link Constants#MIRROR_COLLECTION_NAME}.</p>
      *
      * @param conn             A database connection.
@@ -4415,6 +4427,8 @@ public class DataBaseConnector {
         }
         return ids;
     }
+
+
 
     public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}
 

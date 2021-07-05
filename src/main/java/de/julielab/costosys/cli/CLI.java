@@ -24,6 +24,7 @@ import de.julielab.costosys.dbconnection.util.CoStoSysException;
 import de.julielab.costosys.dbconnection.util.CoStoSysRuntimeException;
 import de.julielab.costosys.medline.ConfigurationConstants;
 import de.julielab.costosys.medline.Updater;
+import de.julielab.java.utilities.CLIInteractionUtilities;
 import de.julielab.java.utilities.IOStreamUtilities;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
@@ -460,6 +461,16 @@ public class CLI {
                     System.out.println("Dropping table \"" + unqualifiedTableName + "\" in Postgres schema \"" + schema
                             + "\" of database " + dbc.getDbURL());
                     dbc.dropTable(String.join(".", schema, unqualifiedTableName));
+                    List<String> tablesInSchema = dbc.getTables();
+                    if (tablesInSchema.isEmpty()) {
+                        if(CLIInteractionUtilities.readYesNoFromStdInWithMessage("Postgres schema " + dbc.getActivePGSchema() + " is now empty. Should it be removed?", false)) {
+                            if(dbc.dropSchema(dbc.getActivePGSchema()))
+                                System.out.println("Schema " + dbc.getActivePGSchema() + " was successfully dropped.");
+                            else
+                                System.err.println("Schema " + dbc.getActivePGSchema() + " could not be dropped.");
+                        }
+                    }
+
                 } else {
                     System.out.println("User canceled. Aborting process.");
                 }
