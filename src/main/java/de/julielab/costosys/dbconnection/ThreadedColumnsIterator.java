@@ -169,7 +169,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                             long limit, String schemaName) {
             this.limit = limit;
             closeConnection = conn == null;
-            this.conn = conn != null ? conn : dbc.reserveConnection(true);
+            this.conn = conn != null ? conn : dbc.obtainOrReserveConnection(true);
             this.resExchanger = resExchanger;
             this.fieldConfig = dbc.getFieldConfiguration(schemaName);
             statement = "SELECT " + StringUtils.join(fields, ",") + " FROM " + table + " WHERE ";
@@ -252,7 +252,7 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
     private class ListFromDBThread extends Thread implements ConnectionClosable {
         private final Logger log = LoggerFactory.getLogger(ListFromDBThread.class);
         private final List<String> fields;
-        private Boolean autoCommit;
+//        private Boolean autoCommit;
         private Exchanger<List<Object[]>> listExchanger;
         private List<Object[]> currentList;
         private String selectFrom;
@@ -269,11 +269,11 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                 this.conn = conn;
                 closeConnection = conn == null;
                 if (conn == null) {
-                    this.conn = dbc.reserveConnection(false);
+                    this.conn = dbc.obtainOrReserveConnection(true);
                 }
-                if (conn != null)
-                    autoCommit = this.conn.getAutoCommit();
-                this.conn.setAutoCommit(false);// cursor doesn't work otherwise
+//                if (conn != null)
+//                    autoCommit = this.conn.getAutoCommit();
+//                this.conn.setAutoCommit(false);// cursor doesn't work otherwise
                 Statement st = this.conn.createStatement();
                 log.trace("Setting fetch size to {}", dbc.getQueryBatchSize());
                 st.setFetchSize(dbc.getQueryBatchSize()); // cursor
@@ -293,14 +293,14 @@ public class ThreadedColumnsIterator extends DBCThreadedIterator<Object[]> {
                     listExchanger.exchange(currentList);
                 }
                 log.trace("No more results were retrieved from the ResultSet. Finishing retrieval.");
-                try {
-                    if (autoCommit != null) {
-                        log.trace("Setting auto commit back to {}", autoCommit);
-                        conn.setAutoCommit(autoCommit);
-                    }
-                } catch (SQLException e) {
-                    LOG.error("Exception occurred when trying to set auto commit of connection {} to {}", conn, autoCommit, e);
-                }
+//                try {
+//                    if (autoCommit != null) {
+//                        log.trace("Setting auto commit back to {}", autoCommit);
+//                        conn.setAutoCommit(autoCommit);
+//                    }
+//                } catch (SQLException e) {
+//                    LOG.error("Exception occurred when trying to set auto commit of connection {} to {}", conn, autoCommit, e);
+//                }
                 // null as stop signal
                 listExchanger.exchange(null);
             } catch (InterruptedException e) {
