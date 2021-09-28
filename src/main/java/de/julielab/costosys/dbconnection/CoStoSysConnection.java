@@ -5,7 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class CoStoSysConnection implements AutoCloseable {
     private final static Logger log = LoggerFactory.getLogger(CoStoSysConnection.class);
@@ -47,11 +49,17 @@ public class CoStoSysConnection implements AutoCloseable {
         }
     }
 
-
     public Connection getConnection() {
         return connection;
     }
 
+    private String getCaller() {
+        StackWalker walker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+        String walk = walker.walk(frames -> frames
+                .map(f -> f.getClassName() + "#" + f.getMethodName()).limit(3)
+                .collect(Collectors.joining(", ")));
+        return walk;
+    }
 
     @Override
     public void close() {

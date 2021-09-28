@@ -348,7 +348,7 @@ public class DataBaseConnector {
                 hikariConfig.setPassword(password);
                 hikariConfig.setConnectionTestQuery("SELECT TRUE");
                 hikariConfig.setMaximumPoolSize(dbConfig.getMaxConnections());
-                hikariConfig.setConnectionTimeout(60000);
+                hikariConfig.setConnectionTimeout(120000);
                 // required to be able to get the number of idle connections, see below
                 hikariConfig.setRegisterMbeans(true);
                 dataSource = pools.compute(dbURL, (url, source) -> source == null ? new HikariDataSource(hikariConfig) : source);
@@ -359,7 +359,7 @@ public class DataBaseConnector {
             }
         }
 
-        try {
+//        try {
             int retries = 0;
             do {
                 try {
@@ -391,7 +391,7 @@ public class DataBaseConnector {
                     stm.execute(String.format("SET search_path TO %s", dbConfig.getActivePGSchema()));
                     stm.close();
                 } catch (SQLException e) {
-                    LOG.warn("SQLException occurred:", e);
+//                    LOG.warn("SQLException occurred:", e);
                     LOG.warn("Could not obtain a database connection within the timeout for thread {}. Trying again. Number of try: {}", Thread.currentThread().getName(), ++retries);
                     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
                     try {
@@ -415,25 +415,26 @@ public class DataBaseConnector {
                         LOG.warn("Could not retrieve connection pool statistics: {}. More information can be found on DEBUG level.", t.getMessage());
                         LOG.debug("Could not retrieve connection pool statistics:", t);
                     }
-                    if (retries == 3)
-                        throw e;
+                    LOG.warn("Currently active CoSoSysConnections are total: {}, shared: {}", connectionCache.asMap().values().stream().flatMap(Collection::stream).count(), connectionCache.asMap().values().stream().flatMap(Collection::stream).filter(CoStoSysConnection::isShared).count());
+//                    if (retries == 3)
+//                        throw e;
                 }
             } while (conn == null);
             if (retries > 0)
                 LOG.warn("It took {} retries to obtain a connection", retries);
-        } catch (SQLException e) {
-            LOG.error("Could not connect with " + dbURL);
-            throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
-                    "pool. This can have one of two causes: Firstly, the application might just use all connections " +
-                    "concurrently. Then, a higher number of maximum active database connections in the CoStoSys " +
-                    "configuration might help. This " +
-                    "number is currently set to " + config.getDatabaseConfig().getMaxConnections() + ". The other " +
-                    "possibility are programming errors where connections are retrieved but not closed. Closing " +
-                    "connections means to return them to the pool. It must always be made sure that connections are " +
-                    "closed when they are no longer required. If database iterators are used. i.e. subclasses of " +
-                    "DBCIterator, make sure to fully read the iterators. Otherwise, they might keep a permanent " +
-                    "connection to the database while waiting to be consumed.", e);
-        }
+//        } catch (SQLException e) {
+//            LOG.error("Could not connect with " + dbURL);
+//            throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
+//                    "pool. This can have one of two causes: Firstly, the application might just use all connections " +
+//                    "concurrently. Then, a higher number of maximum active database connections in the CoStoSys " +
+//                    "configuration might help. This " +
+//                    "number is currently set to " + config.getDatabaseConfig().getMaxConnections() + ". The other " +
+//                    "possibility are programming errors where connections are retrieved but not closed. Closing " +
+//                    "connections means to return them to the pool. It must always be made sure that connections are " +
+//                    "closed when they are no longer required. If database iterators are used. i.e. subclasses of " +
+//                    "DBCIterator, make sure to fully read the iterators. Otherwise, they might keep a permanent " +
+//                    "connection to the database while waiting to be consumed.", e);
+//        }
         return conn;
     }
 
@@ -587,8 +588,8 @@ public class DataBaseConnector {
                 // following
                 // http://dba.stackexchange.com/questions/69471/postgres-update-limit-1
                 sql = "UPDATE " + subsetTableName + " AS t SET " + Constants.IN_PROCESS + " = TRUE, "
-                        + Constants.LAST_COMPONENT + " = '" + readerComponent + "', " + Constants.HOST_NAME + " = \'"
-                        + hostName + "\', " + Constants.PID + " = \'" + pid + "\'," + Constants.PROCESSING_TIMESTAMP
+                        + Constants.LAST_COMPONENT + " = '" + readerComponent + "', " + Constants.HOST_NAME + " = '"
+                        + hostName + "', " + Constants.PID + " = '" + pid + "'," + Constants.PROCESSING_TIMESTAMP
                         + " = 'now' FROM (SELECT " + fieldConfig.getPrimaryKeyString() + " FROM " + subsetTableName
                         + " WHERE " + Constants.IN_PROCESS + " = FALSE AND "
                         // eigentlich wollen wir anstelle von FOR UPDATE sogar:
@@ -618,7 +619,7 @@ public class DataBaseConnector {
                             sql, e);
                     SQLException nextException = e.getNextException();
                     if (null != nextException)
-                        LOG.error("Next exception: {}", nextException);
+                        LOG.error("Next exception: ", nextException);
                     // this is not the deadlock error; break the loop
                     break;
                 } else {

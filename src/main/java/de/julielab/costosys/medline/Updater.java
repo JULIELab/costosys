@@ -44,7 +44,7 @@ public class Updater {
         log.debug("Loaded the following document deleters: {}", documentDeleterLoader.stream().map(d -> d.get().getName()).collect(Collectors.joining(", ")));
     }
 
-    private static List<File> getUnprocessedMedlineUpdates(File[] updateFiles, DataBaseConnector dbc) {
+    private static List<File> getUnprocessedMedlineUpdates(File[] updateFiles, DataBaseConnector dbc) throws MedlineUpdateException {
         List<File> unprocessedFiles = new ArrayList<>();
         try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
 
@@ -107,14 +107,14 @@ public class Updater {
                         unprocessedFiles.add(updateFile);
                 }
             } catch (SQLException e) {
-                e.printStackTrace();
+                throw new MedlineUpdateException(e);
             }
         }
         return unprocessedFiles;
     }
 
     private static List<String> getPmidsToDelete(File file) {
-        List<String> pmidsToDelete = new ArrayList<String>();
+        List<String> pmidsToDelete = new ArrayList<>();
         String forEachXpath = "/PubmedArticleSet/DeleteCitation/PMID";
         List<Map<String, String>> fields = new ArrayList<Map<String, String>>();
         Map<String, String> field = new HashMap<String, String>();
@@ -232,18 +232,20 @@ public class Updater {
      * @param file
      * @param dbc
      */
-    private void markFileAsImported(File file, DataBaseConnector dbc) {
+    private void markFileAsImported(File file, DataBaseConnector dbc) throws MedlineUpdateException {
         try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
             Connection conn = coStoSysConnection.getConnection();
             String sql = null;
             try {
+                log.debug("Marking update file {} as imported.", file);
                 sql = String.format(
                         "UPDATE %s SET %s = TRUE, %s = '" + new Timestamp(System.currentTimeMillis()) + "' WHERE %s = '%s'",
                         UPDATE_TABLE, COLUMN_IS_IMPORTED, COLUMN_TIMESTAMP, COLUMN_FILENAME, file.getName());
                 conn.createStatement().execute(sql);
+                coStoSysConnection.commit();
             } catch (SQLException e) {
-                e.printStackTrace();
                 log.error("SQL command was: {}", sql);
+                throw new MedlineUpdateException(e);
             }
         }
     }

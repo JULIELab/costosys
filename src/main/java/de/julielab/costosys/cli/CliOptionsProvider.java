@@ -136,7 +136,8 @@ public class CliOptionsProvider {
         modes.addOption(buildOption("mp", "mark-processed", "Sets the is_processed state of a subset table to true. The -f argument can be used to deliver a file that lists document primary keys, one per line. If such a file is given, only the entries in the file are marked as processed.", "the subset table name"));
 
         modes.addOption(buildOption("q", "query", "Query a table (default: " + Constants.DEFAULT_DATA_TABLE_NAME
-                + ") for XMLs. You can enter the primary keys directly or use -f to specify a file. If you define none of both, the whole table will be returned.\n"
+                + ") for XMLs. You can enter the primary keys directly or use -f to specify a file. In this case, some dummy query must be specified - just any string - to satisfy the option parser. If you define none of both, the whole table will be returned.\n"
+                + "Use -f to provide a file with document IDs to return.\n"
                 + "Use -d to display delimiters between the results.\n"
                 + "Use -z to specify the target table. If the table is a subset, only documents in this subset will be returned.\n"
                 + "Use -l to set a limit of returned documents.\n"
