@@ -393,6 +393,7 @@ public class DataBaseConnector {
                 } catch (SQLException e) {
 //                    LOG.warn("SQLException occurred:", e);
                     LOG.warn("Could not obtain a database connection within the timeout for thread {}. Trying again. Number of try: {}", Thread.currentThread().getName(), ++retries);
+                    LOG.warn("Call trace: {}", Arrays.stream(Thread.currentThread().getStackTrace()).map(s -> s.getFileName() + ":" + s.getLineNumber() + " " + s.getMethodName()).collect(Collectors.joining(", ")));
                     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
                     try {
                         String poolNameStr = dataSource.getPoolName();
@@ -415,7 +416,21 @@ public class DataBaseConnector {
                         LOG.warn("Could not retrieve connection pool statistics: {}. More information can be found on DEBUG level.", t.getMessage());
                         LOG.debug("Could not retrieve connection pool statistics:", t);
                     }
-                    LOG.warn("Currently active CoSoSysConnections are total: {}, shared: {}", connectionCache.asMap().values().stream().flatMap(Collection::stream).count(), connectionCache.asMap().values().stream().flatMap(Collection::stream).filter(CoStoSysConnection::isShared).count());
+                    ConcurrentMap<Thread, List<CoStoSysConnection>> connectionCacheMap = connectionCache.asMap();
+                    LOG.warn("Currently active CoSoSysConnections are total: {}, shared: {}", connectionCacheMap.values().stream().flatMap(Collection::stream).count(), connectionCacheMap.values().stream().flatMap(Collection::stream).filter(CoStoSysConnection::isShared).count());
+                    for (var thread : connectionCacheMap.keySet()) {
+                        List<CoStoSysConnection> connections4thread = connectionCacheMap.get(thread);
+                        LOG.warn("Connections for thread {}", thread.getName());
+                        for (var c : connections4thread) {
+                            boolean internalConnectionClosed = false;
+                            try {
+                                internalConnectionClosed = c.getConnection().isClosed();
+                            } catch (SQLException ex) {
+                                LOG.warn("Cannot obtain internal connection status due to exception", ex);
+                            }
+                            LOG.warn("    {} shared: {}; current usage count: {}; is closed: {}; internal connection is closed: {}", c, c.isShared(), c.getUsageNumber(), c.isClosed(), internalConnectionClosed);
+                        }
+                    }
 //                    if (retries == 3)
 //                        throw e;
                 }
@@ -4113,8 +4128,8 @@ public class DataBaseConnector {
                 conn = list.get(i);
         }
         if (conn == null)
-            throw new IllegalStateException("There was now sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
-        LOG.trace("Obtaining already reserved connection {} for thread {}", conn.getConnection(), currentThread.getName());
+            throw new IllegalStateException("There was no sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
+        LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
         conn.incrementUsageNumber();
         return conn;
     }
@@ -4157,7 +4172,7 @@ public class DataBaseConnector {
         } else {
             connection = obtainConnection();
             if (LOG.isTraceEnabled())
-                LOG.trace("There are shareable connections available, obtained {}", connection.getConnection());
+                LOG.trace("There are shareable connections available, obtained {} with internal connection {}", connection, connection.getConnection());
         }
         return connection;
     }
@@ -4263,7 +4278,7 @@ public class DataBaseConnector {
         }
         CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, shared);
         list.add(costoConn);
-        LOG.trace("Reserving connection {} for thread \"{}\". This thread has now {} connections reserved.", conn, currentThread.getName(), list.size());
+        LOG.trace("Reserving connection {} with internal connection {} for thread \"{}\". This thread has now {} connections reserved.", costoConn, conn, currentThread.getName(), list.size());
         return costoConn;
     }
 
@@ -4306,30 +4321,6 @@ public class DataBaseConnector {
             }
         }
         connectionList.clear();
-    }
-
-    /**
-     * Removes the given connection from the list of reserved connection of the calling thread. If the connection
-     * was not reserved by the calling thread, an <tt>IllegalArgumentException</tt> will be raised. However, it is
-     * also possible to release connections received from another thread by just closing them via {@link Connection#close()}.
-     * This should only be used intentionally, however, to avoid confusion.
-     *
-     * @param conn
-     * @throws IllegalArgumentException If the given connection is not associated with the current thread.
-     */
-    synchronized public void releaseConnection(CoStoSysConnection conn) throws SQLException {
-        Thread currentThread = Thread.currentThread();
-        LOG.trace("Releasing connection {} for thread \"{}\"", conn.getConnection(), currentThread.getName());
-        List<CoStoSysConnection> connectionList;
-        try {
-            connectionList = connectionCache.get(currentThread);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        }
-        // Note that this will not remove anything if the connection is closed by a different thread than the originally reserving one.
-        // This shouldn't be an issue, however, since we clean up closed connections regularly.
-        connectionList.remove(conn);
-        conn.getConnection().close();
     }
 
     public Object withConnectionQuery(DbcQuery<?> command) {

@@ -138,10 +138,11 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             if (tables.length > 1) {
                 this.joined = true;
             }
-            // start the thread that is actually querying the database
+            // start the thread that is actually querying the database (it starts itself in its constructor)
             arrayFromDBThread = new ArrayFromDBThread(conn, resExchanger, keyList, tables, whereClause, schemaName);
             try {
-                // retrieve the first result without yet running the thread;
+                // the 'arrayFromDBThread' is already running to produce the first result;
+                // retrieve the first result without yet running this thread;
                 // when we have the result, we begin to create the result list
                 // out of the first retrieved ResultSet and return the list,
                 // then get the next results and so on...
@@ -149,7 +150,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            setName("ArrayRestoListThread-" + ++arrayResToListThreadCounter);
+            setName("ArrayResultToListThread-" + ++arrayResToListThreadCounter);
             setDaemon(true);
             start();
         }
@@ -194,7 +195,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                 listExchanger.exchange(null); // stop signal
             } catch (InterruptedException | SQLException | IOException e) {
                 log.error(
-                        "Exception occured while reading " + "data from result set, index {}. "
+                        "Exception occurred while reading " + "data from result set, index {}. "
                                 + "Corresponding field in schema definition is: {}. Read data was: \"{}\"",
                         new Object[]{i + 1, fields.get(i), new String(retrievedData[i], StandardCharsets.UTF_8)});
                 byte[][] d = retrievedData;
@@ -342,7 +343,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } finally {
                 closeConnection();
             }
-            log.debug("ArrayFromDBThread has finished");
+            log.debug("{}} has finished", getName());
         }
 
         /**

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.*;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 public class CoStoSysConnection implements AutoCloseable {
@@ -15,6 +16,7 @@ public class CoStoSysConnection implements AutoCloseable {
     private Connection connection;
     private boolean shared;
     private AtomicInteger numUsing;
+    private boolean isClosed;
 
     /**
      * <p>Indicates if this connection can be shared between different code and threads.</p>
@@ -29,23 +31,38 @@ public class CoStoSysConnection implements AutoCloseable {
 
         this.connection = connection;
         this.shared = shared;
-        numUsing = new AtomicInteger(1);
+        this.numUsing = new AtomicInteger(1);
+        this.isClosed = false;
         log.trace("Initial usage: Connection {} is now used {} times by thread {}", connection, numUsing.get(), Thread.currentThread().getName());
     }
 
-    public void incrementUsageNumber() {
-        numUsing.incrementAndGet();
-        if (log.isTraceEnabled())
-            log.trace("Increased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
+    public int getUsageNumber() {
+        return numUsing.get();
     }
 
-    public synchronized void decreaseUsageCounter() throws SQLException {
+    public synchronized boolean incrementUsageNumber() {
+        int currentUsage = numUsing.incrementAndGet();
+        // If the usage after the increment is 1, it was 0 before.
+        // Thus, we have a concurrency issue where the counter had
+        // already hit 0 and the internal connection may already
+        // have been released via decreaseUsageCounter() below.
+        // Thus, this connection cannot be used anymore.
+        // Until I know that this actually an issue, don't handle it but just throw an exception to let us know.
+        if (currentUsage == 1)
+            throw new IllegalStateException("Connection usage counter increased but it had already been fallen to zero before.");
+        if (log.isTraceEnabled())
+            log.trace("Increased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
+        return true;
+    }
+
+    private synchronized void decreaseUsageCounter() throws SQLException {
         final int num = numUsing.decrementAndGet();
         if (log.isTraceEnabled())
-            log.trace("Decreased usage by thread {}: Connection {} is now used {} times", Thread.currentThread().getName(), connection, numUsing.get());
+            log.trace("Decreased usage by thread {}: Connection {} with internal connection {} is now used {} times", Thread.currentThread().getName(), this, connection, numUsing.get());
         if (num == 0) {
-            log.trace("Connection {} is not used any more and is released", connection);
-            dbc.releaseConnection(this);
+            log.trace("Connection {} with internal connection {} is not used any more and is released", this, connection);
+//            dbc.releaseConnection(this);
+            log.trace("Connection {} with internal connection {} was successfully released.", this, connection);
         }
     }
 
@@ -61,12 +78,27 @@ public class CoStoSysConnection implements AutoCloseable {
         return walk;
     }
 
+    public boolean isClosed() {
+        return isClosed;
+    }
+
     @Override
     public void close() {
         try {
             decreaseUsageCounter();
         } catch (SQLException e) {
             throw new CoStoSysSQLRuntimeException(e);
+        } finally {
+            if (numUsing.get() <= 0) {
+                try {
+                    if (!connection.isClosed()) {
+                        connection.close();
+                    }
+                } catch (SQLException e) {
+                    throw new CoStoSysSQLRuntimeException(e);
+                }
+                this.isClosed = true;
+            }
         }
     }
 
