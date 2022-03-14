@@ -69,6 +69,7 @@
 			<xs:attribute name="resolveEntities" type="xs:boolean"></xs:attribute>
 			<xs:attribute name="gzip" type="xs:boolean"></xs:attribute>
 			<xs:attribute name="notNull" type="xs:boolean"/>
+			<xs:attribute name="completeXml" type="xs:boolean"/>
 		</xs:complexType>
 	</xs:element>
 

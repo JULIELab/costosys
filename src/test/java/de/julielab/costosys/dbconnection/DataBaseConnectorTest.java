@@ -16,10 +16,7 @@ import org.testng.annotations.Test;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
@@ -30,13 +27,13 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.AssertJUnit.assertEquals;
 
 public class DataBaseConnectorTest {
-private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.class);
+    private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.class);
     public static PostgreSQLContainer postgres;
     private static DataBaseConnector dbc;
 
     @BeforeClass
     public static void setUp() {
-        postgres = new PostgreSQLContainer<>("postgres:"+DataBaseConnector.POSTGRES_VERSION);
+        postgres = new PostgreSQLContainer<>("postgres:" + DataBaseConnector.POSTGRES_VERSION);
         postgres.start();
         dbc = new DataBaseConnector(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         dbc.setActiveTableSchema("medline_2016");
@@ -330,7 +327,7 @@ private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.
         ResultSet rs3 = conn.createStatement().executeQuery("SELECT xml FROM " + dataTableName + " WHERE " + primaryKeyString + "='" + insertedDocumentIds.get(0) + "'");
         assertTrue(rs3.next());
         String xmlValue;
-        try(ByteArrayInputStream xmlBytes = new ByteArrayInputStream(rs3.getBytes(1)); BufferedInputStream bis = new BufferedInputStream(new GZIPInputStream(xmlBytes))) {
+        try (ByteArrayInputStream xmlBytes = new ByteArrayInputStream(rs3.getBytes(1)); BufferedInputStream bis = new BufferedInputStream(new GZIPInputStream(xmlBytes))) {
             xmlValue = IOStreamUtilities.getStringFromInputStream(bis);
         }
         assertThat(xmlValue).startsWith("<MedlineCitation Owner=\"NLM\" Status=\"MEDLINE\">").contains("<PMID Version=\"1\">10922238</PMID>").endsWith("<NumberOfReferences>25</NumberOfReferences>\n" +
@@ -345,6 +342,35 @@ private final static Logger log = LoggerFactory.getLogger(DataBaseConnectorTest.
     public void testColumnEmpty() {
         dbc.createTable("EmptyTable", "medline_2017", "Just an empty table");
         assertTrue(dbc.isEmpty("EmptyTable", "xml"));
+    }
+
+    @Test
+    public void testmuh() throws Exception {
+        Connection conn = dbc.getConn();
+        conn.setAutoCommit(false);
+        Statement s = conn.createStatement();
+        boolean execute = s.execute("CREATE TABLE mymuhtest (id text PRIMARY KEY, text text)");
+        System.out.println("Table creation: " + execute);
+        boolean execute1 = s.execute("INSERT INTO mymuhtest VALUES ('hallo', 'der text')");
+        System.out.println("Row insertion: " + execute1);
+        ResultSet rs = s.executeQuery("SELECT * FROM mymuhtest");
+        System.out.println("Table contents:");
+        while (rs.next()) {
+            System.out.println(rs.getString(1) + ", " + rs.getString(2));
+        }
+        // TODO das hier loest einen commit aus! In DataBaseConnection#2546 wird also ggfs ungewollt commited
+        conn.setAutoCommit(true);
+        conn.close();
+
+
+        conn = dbc.getConn();
+        s = conn.createStatement();
+        rs = s.executeQuery("SELECT * FROM mymuhtest");
+        System.out.println("Table contents with new connection:");
+        while (rs.next()) {
+            System.out.println(rs.getString(1) + ", " + rs.getString(2));
+        }
+        conn.close();
     }
 
 }

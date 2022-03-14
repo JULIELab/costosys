@@ -65,6 +65,7 @@ public class ThreadedColumnsIteratorTest {
             numRetrieved++;
         }
         assertEquals(10, numRetrieved);
+//        dbc.printConnectionPoolStatus();
 
         it = new de.julielab.costosys.dbconnection.ThreadedColumnsIterator(dbc, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
         numRetrieved = 0;
@@ -74,6 +75,7 @@ public class ThreadedColumnsIteratorTest {
             numRetrieved++;
         }
         assertEquals(10, numRetrieved);
+//        dbc.printConnectionPoolStatus();
 
         it = new de.julielab.costosys.dbconnection.ThreadedColumnsIterator(dbc, Arrays.asList("pmid", "xml"), Constants.DEFAULT_DATA_TABLE_NAME);
         numRetrieved = 0;

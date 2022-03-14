@@ -22,8 +22,8 @@ import de.julielab.costosys.dbconnection.DataBaseConnector;
 import de.julielab.costosys.dbconnection.SubsetStatus;
 import de.julielab.costosys.dbconnection.util.CoStoSysException;
 import de.julielab.costosys.dbconnection.util.CoStoSysRuntimeException;
-import de.julielab.costosys.medline.ConfigurationConstants;
-import de.julielab.costosys.medline.Updater;
+import de.julielab.costosys.medline.PMCUpdater;
+import de.julielab.costosys.medline.PubmedUpdater;
 import de.julielab.java.utilities.CLIInteractionUtilities;
 import de.julielab.java.utilities.IOStreamUtilities;
 import de.julielab.xml.JulieXMLConstants;
@@ -129,6 +129,8 @@ public class CLI {
                 mode = Mode.DROP_TABLE;
             if (cmd.hasOption("im"))
                 mode = Mode.IMPORT_UPDATE_MEDLINE;
+            if (cmd.hasOption("ip"))
+                mode = Mode.IMPORT_UPDATE_PMC;
             if (cmd.hasOption("mp"))
                 mode = Mode.MARK_PROCESSED;
             if (cmd.hasOption("vn"))
@@ -363,8 +365,17 @@ public class CLI {
                         break;
 
                     case IMPORT_UPDATE_MEDLINE:
-                        Updater updater = new Updater(loadXmlConfiguration(new File(cmd.getOptionValue("im"))));
+                        String medlineUpdateConfigFile = cmd.getOptionValue("im");
+                        PubmedUpdater updater = new PubmedUpdater(loadXmlConfiguration(new File(medlineUpdateConfigFile)));
+                        createDataTableWithComment(dbc, superTableName, "Created on " + new Date() + " by CoSoSys with MEDLINE update configuration " + medlineUpdateConfigFile);
                         updater.process(dbc, cmd.hasOption("iap"));
+                        break;
+
+                    case IMPORT_UPDATE_PMC:
+                        String pmcUpdateConfigFile = cmd.getOptionValue("ip");
+                        PMCUpdater pmcUpdater = new PMCUpdater(loadXmlConfiguration(new File(cmd.getOptionValue("ip"))));
+                        createDataTableWithComment(dbc, superTableName, "Created on " + new Date() + " by CoSoSys with PMC update configuration " + pmcUpdateConfigFile);
+                        pmcUpdater.process(dbc, cmd.hasOption("iap"));
                         break;
 
                     case MARK_PROCESSED:
@@ -463,8 +474,8 @@ public class CLI {
                     dbc.dropTable(String.join(".", schema, unqualifiedTableName));
                     List<String> tablesInSchema = dbc.getTables();
                     if (tablesInSchema.isEmpty()) {
-                        if(CLIInteractionUtilities.readYesNoFromStdInWithMessage("Postgres schema " + dbc.getActivePGSchema() + " is now empty. Should it be removed?", false)) {
-                            if(dbc.dropSchema(dbc.getActivePGSchema()))
+                        if (CLIInteractionUtilities.readYesNoFromStdInWithMessage("Postgres schema " + dbc.getActivePGSchema() + " is now empty. Should it be removed?", false)) {
+                            if (dbc.dropSchema(dbc.getActivePGSchema()))
                                 System.out.println("Schema " + dbc.getActivePGSchema() + " was successfully dropped.");
                             else
                                 System.err.println("Schema " + dbc.getActivePGSchema() + " could not be dropped.");
@@ -661,15 +672,8 @@ public class CLI {
         boolean error = false;
         if (fileStr != null) {
 
-            if (!dbc.withConnectionQueryBoolean(c -> c.tableExists(superTableName))) {
-                error = checkSchema(dbc, superTableName);
-                final String comment = "Data table created " + new Date().toString() + " by importing data from path " + fileStr;
-                if (!error) {
-                    dbc.withConnectionExecute(c -> c.createTable(superTableName, comment));
-                    logMessage("Created table " + superTableName);
-
-                }
-            }
+            final String comment = "Data table created " + new Date() + " by importing data from path " + fileStr;
+            error = createDataTableWithComment(dbc, superTableName, comment);
 
             if (dbc.withConnectionQueryBoolean(c -> c.isEmpty(superTableName)) && !updateMode) {
                 dbc.withConnectionExecute(c -> c.importFromXMLFile(fileStr, superTableName));
@@ -681,6 +685,18 @@ public class CLI {
         } else {
             LOG.error("You must specify a file or directory to retrieve XML files from.");
             error = true;
+        }
+        return error;
+    }
+
+    private static boolean createDataTableWithComment(DataBaseConnector dbc, String superTableName, String comment) {
+        boolean error = false;
+        if (!dbc.withConnectionQueryBoolean(c -> c.tableExists(superTableName))) {
+            error = checkSchema(dbc, superTableName);
+            if (!error) {
+                dbc.withConnectionExecute(c -> c.createTable(superTableName, comment));
+                logMessage("Created table " + superTableName);
+            }
         }
         return error;
     }
@@ -991,6 +1007,6 @@ public class CLI {
     }
 
     private enum Mode {
-        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, DELETE_ROWS, IMPORT_UPDATE_MEDLINE, MARK_PROCESSED, PRINT_VERSION
+        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, DELETE_ROWS, IMPORT_UPDATE_MEDLINE, IMPORT_UPDATE_PMC, MARK_PROCESSED, PRINT_VERSION
     }
 }

@@ -78,10 +78,10 @@ public class DataBaseConnector {
     /**
      * Size of the byte buffer used for reading xml into vtd (xml parser)
      */
-    private final static int BUFFER_SIZE = 1000;
+    private final static int BUFFER_SIZE = 1024;
     private static final String DEFAULT_FIELD = "xml";
     private static final String DEFAULT_TABLE = Constants.DEFAULT_DATA_TABLE_NAME;
-    private static final int commitBatchSize = 100;
+    private static final int commitBatchSize = 500;
     private static final int RETRIEVE_MARK_LIMIT = 1000;
     private static final int ID_SUBLIST_SIZE = 1000;
     private static final Map<String, HikariDataSource> pools = new ConcurrentHashMap<>();
@@ -359,7 +359,7 @@ public class DataBaseConnector {
             }
         }
 
-//        try {
+        try {
             int retries = 0;
             do {
                 try {
@@ -416,41 +416,46 @@ public class DataBaseConnector {
                         LOG.warn("Could not retrieve connection pool statistics: {}. More information can be found on DEBUG level.", t.getMessage());
                         LOG.debug("Could not retrieve connection pool statistics:", t);
                     }
-                    ConcurrentMap<Thread, List<CoStoSysConnection>> connectionCacheMap = connectionCache.asMap();
-                    LOG.warn("Currently active CoSoSysConnections are total: {}, shared: {}", connectionCacheMap.values().stream().flatMap(Collection::stream).count(), connectionCacheMap.values().stream().flatMap(Collection::stream).filter(CoStoSysConnection::isShared).count());
-                    for (var thread : connectionCacheMap.keySet()) {
-                        List<CoStoSysConnection> connections4thread = connectionCacheMap.get(thread);
-                        LOG.warn("Connections for thread {}", thread.getName());
-                        for (var c : connections4thread) {
-                            boolean internalConnectionClosed = false;
-                            try {
-                                internalConnectionClosed = c.getConnection().isClosed();
-                            } catch (SQLException ex) {
-                                LOG.warn("Cannot obtain internal connection status due to exception", ex);
-                            }
-                            LOG.warn("    {} shared: {}; current usage count: {}; is closed: {}; internal connection is closed: {}", c, c.isShared(), c.getUsageNumber(), c.isClosed(), internalConnectionClosed);
-                        }
+                    printConnectionPoolStatus();
+                    if (retries == 3) {
+                        throw e;
                     }
-//                    if (retries == 3)
-//                        throw e;
                 }
             } while (conn == null);
             if (retries > 0)
                 LOG.warn("It took {} retries to obtain a connection", retries);
-//        } catch (SQLException e) {
-//            LOG.error("Could not connect with " + dbURL);
-//            throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
-//                    "pool. This can have one of two causes: Firstly, the application might just use all connections " +
-//                    "concurrently. Then, a higher number of maximum active database connections in the CoStoSys " +
-//                    "configuration might help. This " +
-//                    "number is currently set to " + config.getDatabaseConfig().getMaxConnections() + ". The other " +
-//                    "possibility are programming errors where connections are retrieved but not closed. Closing " +
-//                    "connections means to return them to the pool. It must always be made sure that connections are " +
-//                    "closed when they are no longer required. If database iterators are used. i.e. subclasses of " +
-//                    "DBCIterator, make sure to fully read the iterators. Otherwise, they might keep a permanent " +
-//                    "connection to the database while waiting to be consumed.", e);
-//        }
+        } catch (SQLException e) {
+            LOG.error("Could not connect with " + dbURL);
+            throw new UnobtainableConnectionException("No database connection could be obtained from the connection " +
+                    "pool. This can have one of two causes: Firstly, the application might just use all connections " +
+                    "concurrently. Then, a higher number of maximum active database connections in the CoStoSys " +
+                    "configuration might help. This " +
+                    "number is currently set to " + config.getDatabaseConfig().getMaxConnections() + ". The other " +
+                    "possibility are programming errors where connections are retrieved but not closed. Closing " +
+                    "connections means to return them to the pool. It must always be made sure that connections are " +
+                    "closed when they are no longer required. If database iterators are used. i.e. subclasses of " +
+                    "DBCIterator, make sure to fully read the iterators. Otherwise, they might keep a permanent " +
+                    "connection to the database while waiting to be consumed.", e);
+        }
         return conn;
+    }
+
+    public void printConnectionPoolStatus() {
+        ConcurrentMap<Thread, List<CoStoSysConnection>> connectionCacheMap = connectionCache.asMap();
+        LOG.warn("Currently active CoSoSysConnections are total: {}, shared: {}", connectionCacheMap.values().stream().flatMap(Collection::stream).count(), connectionCacheMap.values().stream().flatMap(Collection::stream).filter(CoStoSysConnection::isShared).count());
+        for (var thread : connectionCacheMap.keySet()) {
+            List<CoStoSysConnection> connections4thread = connectionCacheMap.get(thread);
+            LOG.warn("Connections for thread {}", thread.getName());
+            for (var c : connections4thread) {
+                boolean internalConnectionClosed = false;
+                try {
+                    internalConnectionClosed = c.getConnection().isClosed();
+                } catch (SQLException ex) {
+                    LOG.warn("Cannot obtain internal connection status due to exception", ex);
+                }
+                LOG.warn("    {} shared: {}; current usage count: {}; is closed: {}; internal connection is closed: {}", c, c.isShared(), c.getUsageNumber(), c.isClosed(), internalConnectionClosed);
+            }
+        }
     }
 
     /**
@@ -2412,12 +2417,10 @@ public class DataBaseConnector {
             fileNames = new String[1];
             fileNames[0] = fileStr;
         } else {
-            fileNames = fileOrDir.list(new FilenameFilter() {
-                public boolean accept(File arg0, String arg1) {
-                    // TODO write accepted file extensions in configuration
-                    // file
-                    return arg1.endsWith(".zip") || arg1.endsWith(".gz") || arg1.endsWith(".xml");
-                }
+            fileNames = fileOrDir.list((arg0, arg1) -> {
+                // TODO write accepted file extensions in configuration
+                // file
+                return arg1.endsWith(".zip") || arg1.endsWith(".gz") || arg1.endsWith(".xml");
             });
         }
 
@@ -2540,7 +2543,7 @@ public class DataBaseConnector {
                 // commit(conn);
                 if (commit)
                     conn.commit();
-                conn.setAutoCommit(wasAutoCommit);
+//                conn.setAutoCommit(wasAutoCommit);
             }
         } catch (SQLException e) {
             LOG.error("SQLException while trying to insert: ", e);
@@ -2658,8 +2661,9 @@ public class DataBaseConnector {
                         if (j < fields.size()) {
                             Map<String, String> field = fields.get(j);
                             String fieldName = field.get(JulieXMLConstants.NAME);
-                            if (row.containsKey(fieldName))
+                            if (row.containsKey(fieldName)) {
                                 setPreparedStatementParameterWithType(psIndex++, ps, row.get(fieldName), null, null);
+                            }
                         } else {
                             String key = primaryKey[j - fields.size()];
                             Object keyValue = row.get(key);
@@ -2683,7 +2687,7 @@ public class DataBaseConnector {
                     executeAndCommitUpdate(tableName, conn, commit, schemaName, fieldConfig, mirrorNames,
                             mirrorStatements, psMap.values(), cache);
                 }
-                conn.setAutoCommit(wasAutoCommit);
+//                conn.setAutoCommit(wasAutoCommit);
             }
         } catch (SQLException e) {
             LOG.error(
@@ -2745,7 +2749,7 @@ public class DataBaseConnector {
             externalConn.setAutoCommit(false);
             for (PreparedStatement ps : preparedStatements) {
                 int[] returned = ps.executeBatch();
-
+                LOG.trace("Executed prepared statement for update, {} rows effected in table {} with query {}", returned.length, tableName, ps);
                 List<Map<String, Object>> toInsert = new ArrayList<>(commitBatchSize);
                 List<Map<String, Object>> toResetRows = new ArrayList<>(commitBatchSize);
                 List<Object[]> toResetPKs = new ArrayList<>();
@@ -2755,6 +2759,7 @@ public class DataBaseConnector {
                 // Do a commit to end the transaction. This is sometimes even necessary
                 // because following transactions would be blocked otherwise.
                 LOG.trace("Committing updates to the data table.");
+                if (commit)
                 externalConn.commit();
                 if (mirrorNames != null) {
                     LOG.trace("Applying updates to mirror subsets:");
@@ -2809,7 +2814,7 @@ public class DataBaseConnector {
                 }
             }
         } finally {
-            externalConn.setAutoCommit(wasAutoCommit);
+//            externalConn.setAutoCommit(wasAutoCommit);
         }
     }
 
@@ -3821,7 +3826,7 @@ public class DataBaseConnector {
      * @param primaryKeyList  the list of primary keys which itself can consist of several
      *                        primary key elements
      */
-    public void setProcessed(String subsetTableName, ArrayList<byte[][]> primaryKeyList) {
+    public void setProcessed(String subsetTableName, List<byte[][]> primaryKeyList) {
 
         FieldConfig fieldConfig = fieldConfigs.get(activeTableSchema);
 
@@ -4107,31 +4112,33 @@ public class DataBaseConnector {
      * @see #releaseConnections()
      * @see #reserveConnection(boolean)
      */
-    synchronized public CoStoSysConnection obtainConnection() {
-        logConnectionAllocation();
-        Thread currentThread = Thread.currentThread();
-        LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
-        List<CoStoSysConnection> list;
-        try {
-            list = connectionCache.get(currentThread);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        }
-        cleanClosedReservedConnections(list, currentThread);
-        if (list.isEmpty())
-            throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
-        // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
-        // a method can be sure that it reserves a connection for its subcalls.
-        CoStoSysConnection conn = null;
-        for (int i = list.size() - 1; i >= 0; --i) {
-            if (list.get(i).isShared())
-                conn = list.get(i);
-        }
-        if (conn == null)
-            throw new IllegalStateException("There was no sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
-        LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
-        conn.incrementUsageNumber();
-        return conn;
+     public CoStoSysConnection obtainConnection() {
+         synchronized (this) {
+             logConnectionAllocation();
+             Thread currentThread = Thread.currentThread();
+             LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
+             List<CoStoSysConnection> list;
+             try {
+                 list = connectionCache.get(currentThread);
+             } catch (ExecutionException e) {
+                 throw new RuntimeException(e);
+             }
+             cleanClosedReservedConnections(list, currentThread);
+             if (list.isEmpty())
+                 throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
+             // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
+             // a method can be sure that it reserves a connection for its subcalls.
+             CoStoSysConnection conn = null;
+             for (int i = list.size() - 1; i >= 0; --i) {
+                 if (list.get(i).isShared())
+                     conn = list.get(i);
+             }
+             if (conn == null)
+                 throw new IllegalStateException("There was no sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
+             LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
+             conn.incrementUsageNumber();
+             return conn;
+         }
     }
 
     /**
@@ -4162,19 +4169,21 @@ public class DataBaseConnector {
      * @return A pair consisting of connection and the information if it was newly reserved or not.
      * @see #releaseConnection(CoStoSysConnection)
      */
-    synchronized public CoStoSysConnection obtainOrReserveConnection(boolean shared) {
-        LOG.trace("Connection requested, obtained or newly reserved");
-        CoStoSysConnection connection;
-        // Only count connections that can be shared
-        int sharableReservedConnections = getNumReservedConnections(true);
-        if (sharableReservedConnections == 0) {
-            connection = reserveConnection(shared);
-        } else {
-            connection = obtainConnection();
-            if (LOG.isTraceEnabled())
-                LOG.trace("There are shareable connections available, obtained {} with internal connection {}", connection, connection.getConnection());
+    public CoStoSysConnection obtainOrReserveConnection(boolean shared) {
+        synchronized (this) {
+            LOG.trace("Connection requested, obtained or newly reserved");
+            CoStoSysConnection connection;
+            // Only count connections that can be shared
+            int sharableReservedConnections = getNumReservedConnections(true);
+            if (sharableReservedConnections == 0) {
+                connection = reserveConnection(shared);
+            } else {
+                connection = obtainConnection();
+                if (LOG.isTraceEnabled())
+                    LOG.trace("There are shareable connections available, obtained {} with internal connection {}", connection, connection.getConnection());
+            }
+            return connection;
         }
-        return connection;
     }
 
     public int getNumReservedConnections() {
@@ -4252,34 +4261,36 @@ public class DataBaseConnector {
      * @see #obtainConnection()
      * @see #releaseConnections()
      */
-    synchronized public CoStoSysConnection reserveConnection(boolean shared) {
-        logConnectionAllocation();
+     public CoStoSysConnection reserveConnection(boolean shared) {
+         synchronized (this) {
+             logConnectionAllocation();
 
-        Thread currentThread = Thread.currentThread();
-        LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
-        List<CoStoSysConnection> list;
-        try {
-            list = connectionCache.get(currentThread);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        }
-        int listSize = list.size();
-        cleanClosedReservedConnections(list, currentThread);
-        if (LOG.isTraceEnabled() && list.size() < listSize) {
-            LOG.trace("The list of connections for thread \"{}\" was shortened from {} to {} due to connections closed in the meantime.", currentThread.getName(), listSize, list.size());
-        }
-        if (list.size() == dbConfig.getMaxConnections())
-            LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
-        Connection conn = getConn();
-        try {
-            assert conn.getAutoCommit();
-        } catch (SQLException e) {
-            throw new CoStoSysSQLRuntimeException(e);
-        }
-        CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, shared);
-        list.add(costoConn);
-        LOG.trace("Reserving connection {} with internal connection {} for thread \"{}\". This thread has now {} connections reserved.", costoConn, conn, currentThread.getName(), list.size());
-        return costoConn;
+             Thread currentThread = Thread.currentThread();
+             LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
+             List<CoStoSysConnection> list;
+             try {
+                 list = connectionCache.get(currentThread);
+             } catch (ExecutionException e) {
+                 throw new RuntimeException(e);
+             }
+             int listSize = list.size();
+             cleanClosedReservedConnections(list, currentThread);
+             if (LOG.isTraceEnabled() && list.size() < listSize) {
+                 LOG.trace("The list of connections for thread \"{}\" was shortened from {} to {} due to connections closed in the meantime.", currentThread.getName(), listSize, list.size());
+             }
+             if (list.size() == dbConfig.getMaxConnections())
+                 LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
+             Connection conn = getConn();
+             try {
+                 assert conn.getAutoCommit();
+             } catch (SQLException e) {
+                 throw new CoStoSysSQLRuntimeException(e);
+             }
+             CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, shared);
+             list.add(costoConn);
+             LOG.trace("Reserving connection {} with internal connection {} for thread \"{}\". This thread has now {} connections reserved.", costoConn, conn, currentThread.getName(), list.size());
+             return costoConn;
+         }
     }
 
     private void logConnectionAllocation() {
@@ -4301,26 +4312,28 @@ public class DataBaseConnector {
      * @see #reserveConnection(boolean)
      * @see #obtainConnection()
      */
-    synchronized public void releaseConnections() {
-        Thread currentThread = Thread.currentThread();
-        LOG.trace("Releasing all connections held for Thread \"{}\"", currentThread.getName());
-        List<CoStoSysConnection> connectionList;
-        try {
-            connectionList = connectionCache.get(currentThread);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        }
-        for (CoStoSysConnection conn : connectionList) {
-            try {
-                if (!conn.getConnection().isClosed()) {
-                    LOG.trace("Closing connection {}", conn.getConnection());
-                    conn.getConnection().close();
-                }
-            } catch (SQLException e) {
-                LOG.error("Could not release connection back to the pool", e);
-            }
-        }
-        connectionList.clear();
+     public void releaseConnections() {
+         synchronized (this) {
+             Thread currentThread = Thread.currentThread();
+             LOG.trace("Releasing all connections held for Thread \"{}\"", currentThread.getName());
+             List<CoStoSysConnection> connectionList;
+             try {
+                 connectionList = connectionCache.get(currentThread);
+             } catch (ExecutionException e) {
+                 throw new RuntimeException(e);
+             }
+             for (CoStoSysConnection conn : connectionList) {
+                 try {
+                     if (!conn.getConnection().isClosed()) {
+                         LOG.trace("Closing connection {}", conn.getConnection());
+                         conn.getConnection().close();
+                     }
+                 } catch (SQLException e) {
+                     LOG.error("Could not release connection back to the pool", e);
+                 }
+             }
+             connectionList.clear();
+         }
     }
 
     public Object withConnectionQuery(DbcQuery<?> command) {
@@ -4452,7 +4465,7 @@ public class DataBaseConnector {
             }
             File xmlFile = new File(xmlFilePath);
             boolean hugeFile = false;
-            if (!fileName.endsWith(".zip") && xmlFile.length() >= 1024 * 1024 * 1024) {
+            if (!(fileName.endsWith(".zip") || fileName.endsWith(".tar") || fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) && xmlFile.length() >= 1024 * 1024 * 1024) {
                 LOG.info("File is larger than 1GB. Trying VTD huge.");
                 hugeFile = true;
             }

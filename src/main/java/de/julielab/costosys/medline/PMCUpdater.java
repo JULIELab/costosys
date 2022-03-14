@@ -3,13 +3,13 @@ package de.julielab.costosys.medline;
 import de.julielab.costosys.Constants;
 import de.julielab.costosys.dbconnection.CoStoSysConnection;
 import de.julielab.costosys.dbconnection.DataBaseConnector;
-import de.julielab.xml.JulieXMLConstants;
-import de.julielab.xml.JulieXMLTools;
+import de.julielab.java.utilities.FileUtilities;
 import org.apache.commons.configuration2.HierarchicalConfiguration;
 import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -19,32 +19,32 @@ import java.util.stream.Collectors;
 
 import static de.julielab.java.utilities.ConfigurationUtilities.dot;
 
-public class Updater {
+public class PMCUpdater {
 
     /**
      * Name of the table that keeps track of already imported and finished Medline
      * update files. Value: {@value #UPDATE_TABLE}.
      */
-    public static final String UPDATE_TABLE = Constants.DEFAULT_DATA_SCHEMA + "._medline_update_files";
+    public static final String UPDATE_TABLE = Constants.DEFAULT_DATA_SCHEMA + "._pmc_update_files";
     public static final String COLUMN_FILENAME = "update_file_name";
     public static final String COLUMN_IS_IMPORTED = "is_imported";
     public static final String COLUMN_TIMESTAMP = "timestamp_of_import";
-    private final static Logger log = LoggerFactory.getLogger(Updater.class);
-    private final String[] medlineFileDirectories;
+    private final static Logger log = LoggerFactory.getLogger(PMCUpdater.class);
+    private final String[] pmcFileDirectories;
 
     private ServiceLoader<IDocumentDeleter> documentDeleterLoader;
 
     private HierarchicalConfiguration<ImmutableNode> configuration;
 
-    public Updater(HierarchicalConfiguration<ImmutableNode> configuration) {
+    public PMCUpdater(HierarchicalConfiguration<ImmutableNode> configuration) {
         this.configuration = configuration;
-        this.medlineFileDirectories = configuration.getStringArray(ConfigurationConstants.DIRECTORY);
+        this.pmcFileDirectories = configuration.getStringArray(ConfigurationConstants.DIRECTORY);
         documentDeleterLoader = ServiceLoader.load(IDocumentDeleter.class);
-        log.info("Initialized MEDLINE Updater with file directories {} and document deleters {}.", this.medlineFileDirectories, configuration.getStringArray(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER)));
+        log.info("Initialized PMC Updater with file directories {} and document deleters {}.", this.pmcFileDirectories, configuration.getStringArray(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER)));
         log.debug("Loaded the following document deleters: {}", documentDeleterLoader.stream().map(d -> d.get().getName()).collect(Collectors.joining(", ")));
     }
 
-    private static List<File> getUnprocessedMedlineUpdates(File[] updateFiles, DataBaseConnector dbc) throws MedlineUpdateException {
+    private static List<File> getUnprocessedPMCUpdates(File[] updateFiles, DataBaseConnector dbc) throws MedlineUpdateException {
         List<File> unprocessedFiles = new ArrayList<>();
         try (CoStoSysConnection coStoSysConnection = dbc.obtainOrReserveConnection(true)) {
 
@@ -113,50 +113,55 @@ public class Updater {
         return unprocessedFiles;
     }
 
-    private static List<String> getPmidsToDelete(File file) {
-        List<String> pmidsToDelete = new ArrayList<>();
-        String forEachXpath = "/PubmedArticleSet/DeleteCitation/PMID";
-        List<Map<String, String>> fields = new ArrayList<Map<String, String>>();
-        Map<String, String> field = new HashMap<String, String>();
-        field.put(JulieXMLConstants.NAME, Constants.PMID_FIELD_NAME);
-        field.put(JulieXMLConstants.XPATH, ".");
-        fields.add(field);
-
-        int bufferSize = 1000;
-        Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(file.getAbsolutePath(), bufferSize,
-                forEachXpath, fields, false);
-
-        while (it.hasNext()) {
-            Map<String, Object> row = it.next();
-            String pmid = (String) row.get(Constants.PMID_FIELD_NAME);
-            pmidsToDelete.add(pmid);
+    /**
+     * Reads the filelist.txt file for the given XML archive file. Extracts the IDs that are marked as "retracted".
+     * Note tha per PMC policy, retracted articles are not actually removed from PMC. So we might actually keep them, too.
+     * @param file
+     * @return
+     * @see <url>https://www.ncbi.nlm.nih.gov/labs/pmc/about/guidelines/#retract</url>
+     */
+    private static List<String> getPmcidsToDelete(File file) {
+        File tsvFile = new File(file.getAbsolutePath().replace(".tar.gz", "filelist.txt"));
+        List<String> pmcidsToDelete = new ArrayList<>();
+        int pmcFilePathIndex = 0;
+        int retractionIndex = 6;
+        try (BufferedReader br = FileUtilities.getReaderFromFile(tsvFile)) {
+            br.lines().map(l -> l.split("\\t"))
+                    .filter(s -> s[retractionIndex].equalsIgnoreCase("yes"))
+                    .map(s -> s[pmcFilePathIndex]).map(path -> path.substring(path.indexOf('/') + 1))
+                    .map(filename -> filename.replace(".xml", ""))
+                    .forEach(pmcidsToDelete::add);
+        } catch (IOException e) {
+            log.error("Could not process the {} file. No retracted documents will be removed.");
         }
-        return pmidsToDelete;
+        return pmcidsToDelete;
     }
 
     public void process(DataBaseConnector dbc, boolean ignoreAlreadyProcessed) throws MedlineUpdateException, IOException {
         if (ignoreAlreadyProcessed)
-            log.info("Ignoring update file processing state in the database and processing all files in the directories {}.", medlineFileDirectories);
+            log.info("Ignoring update file processing state in the database and processing all files in the directories {}.", pmcFileDirectories);
         configureDocumentDeleters();
-        for (String directory : medlineFileDirectories) {
+        for (String directory : pmcFileDirectories) {
             log.info("Updating from {} into database at {}", directory, dbc.getDbURL());
-            File[] medlineFiles = getMedlineFiles(directory);
-            if (medlineFiles != null && medlineFiles.length > 0) {
-                List<File> unprocessedMedlineUpdates = ignoreAlreadyProcessed ? Arrays.asList(medlineFiles) : getUnprocessedMedlineUpdates(medlineFiles, dbc);
+            File[] pmcFiles = getPMCFiles(directory);
+            if (pmcFiles != null && pmcFiles.length > 0) {
+                List<File> unprocessedPmcUpdates = ignoreAlreadyProcessed ? Arrays.asList(pmcFiles) : getUnprocessedPMCUpdates(pmcFiles, dbc);
                 // A very important step: Sort the list to be in
                 // the correct update-sequence. If we don't, it can happen that we
                 // process a newer update before an older which will then result in
                 // deprecated documents kept in the database.
-                // The files are named like "medline13n0792.xml.zip", i.e.
-                // their sequence number if part of the file name. We just
+                // The files are named like "oa_comm_xml.incr.2022-01-07.tar.gz", i.e.
+                // their release date is part of the file name. We just
                 // have to sort by string comparison.
-                Collections.sort(unprocessedMedlineUpdates, Comparator.comparing(File::getName));
+                Collections.sort(unprocessedPmcUpdates, Comparator.comparing(File::getName));
                 // Get the names of all deleters to be applied.
                 String[] configuredDeleters = configuration.getStringArray(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER));
-                for (File file : unprocessedMedlineUpdates) {
+                for (File file : unprocessedPmcUpdates) {
                     log.info("Processing file {}.", file.getAbsoluteFile());
                     dbc.updateFromXML(file.getAbsolutePath(), Constants.DEFAULT_DATA_TABLE_NAME, true);
-                    List<String> pmidsToDelete = getPmidsToDelete(file);
+                    // the algorithm to retrieve retracted PMC ids is implemented. But PMC policy says that they
+                    // keep those documents around. So we don't bother as well, for now.
+                    List<String> pmidsToDelete = Collections.emptyList();//getPmcidsToDelete(file);
                     Set<IDocumentDeleter> appliedDeleters = new HashSet<>();
                     for (Iterator<IDocumentDeleter> it = documentDeleterLoader.iterator(); it.hasNext(); ) {
                         IDocumentDeleter documentDeleter = it.next();
@@ -182,21 +187,21 @@ public class Updater {
         }
     }
 
-    protected File[] getMedlineFiles(String medlinePathString) throws FileNotFoundException {
-        File medlinePath = new File(medlinePathString);
-        if (!medlinePath.exists())
-            throw new FileNotFoundException("File \"" + medlinePathString + "\" was not found.");
-        if (!medlinePath.isDirectory())
-            return new File[]{medlinePath};
-        File[] medlineFiles = medlinePath.listFiles(file -> {
+    protected File[] getPMCFiles(String pathString) throws FileNotFoundException {
+        File pmcPath = new File(pathString);
+        if (!pmcPath.exists())
+            throw new FileNotFoundException("File \"" + pathString + "\" was not found.");
+        if (!pmcPath.isDirectory())
+            return new File[]{pmcPath};
+        File[] pmcFiles = pmcPath.listFiles(file -> {
             String filename = file.getName();
-            return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip");
+            return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip") || filename.endsWith("tgz") || filename.endsWith("tar.gz");
         });
         // Check whether anything has been read.
-        if (medlineFiles == null || medlineFiles.length == 0) {
-            log.info("No (g)zipped files found in directory {}. No update will be performed.", medlinePathString);
+        if (pmcFiles == null || pmcFiles.length == 0) {
+            log.info("No (g)zipped files found in directory {}. No update will be performed.", pathString);
         }
-        return medlineFiles;
+        return pmcFiles;
     }
 
     private void configureDocumentDeleters() throws DocumentDeletionException {
@@ -242,7 +247,6 @@ public class Updater {
                         "UPDATE %s SET %s = TRUE, %s = '" + new Timestamp(System.currentTimeMillis()) + "' WHERE %s = '%s'",
                         UPDATE_TABLE, COLUMN_IS_IMPORTED, COLUMN_TIMESTAMP, COLUMN_FILENAME, file.getName());
                 conn.createStatement().execute(sql);
-                coStoSysConnection.commit();
             } catch (SQLException e) {
                 log.error("SQL command was: {}", sql);
                 throw new MedlineUpdateException(e);

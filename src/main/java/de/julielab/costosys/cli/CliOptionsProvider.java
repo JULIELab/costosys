@@ -119,7 +119,8 @@ public class CliOptionsProvider {
         OptionGroup modes = new OptionGroup();
 
         modes.addOption(buildOption("i", "import", "Import data into the _data table", "file/dir to import"));
-        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table. The parameter is an XML file holding information about the PubMed/MEDLINE XML file location in the format downloaded directly from the MEDLINE FTP server.  Keeps track of already applied imported files via an internal table", "MEDLINE import/update XML configuration"));
+        modes.addOption(buildOption("im", "importmedline", "Import PubMed/MEDLINE data into the _data table. The parameter is an XML file holding information about the PubMed/MEDLINE XML file location in the format downloaded directly from the MEDLINE FTP server. Keeps track of already applied imported files via an internal table", "MEDLINE import/update XML configuration"));
+        modes.addOption(buildOption("ip", "importpmc", "Import PubMed Central XML data into the _data table. The parameter is an XML file holding information about the PubMed Central XML file location in the format downloaded directly from the PMC FTP server (bulk download). Keeps track of already applied imported files via an internal table", "PMC import/update XML configuration"));
         modes.addOption(buildOption("u", "update", "Update _data table", "file/dir to update from"));
         modes.addOption(buildOption("s", "subset",
                 "Define a subset table; use -f, -o, -a, -m, -w or -r to specify the subsets source. Use -z to specify the referenced data table, defaults to _data.",
@@ -141,7 +142,7 @@ public class CliOptionsProvider {
                 + "Use -d to display delimiters between the results.\n"
                 + "Use -z to specify the target table. If the table is a subset, only documents in this subset will be returned.\n"
                 + "Use -l to set a limit of returned documents.\n"
-                + "Use -x to specify an XPath expression go extract specific parts of the queried XML documents.\n"
+                + "Use -x to specify an XPath expression to extract specific parts of the queried XML documents.\n"
                 + "Use -out to save the query results to file.", "your query"));
 
         modes.addOption(buildOption("h", "help", "Displays all possible parameters."));

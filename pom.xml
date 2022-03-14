@@ -131,13 +131,13 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.10.3</version>
+            <version>1.16.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>1.10.3</version>
+            <version>1.16.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -148,7 +148,7 @@
         <dependency>
             <groupId>de.julielab</groupId>
             <artifactId>julie-xml-tools</artifactId>
-            <version>0.6.2</version>
+            <version>0.6.5-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
@@ -209,11 +209,6 @@
             <artifactId>jcore-db-test-utilities</artifactId>
             <version>2.5.0</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>de.julielab</groupId>
-            <artifactId>julielab-java-utilities</artifactId>
-            <version>1.3.0</version>
         </dependency>
         <dependency>
             <groupId>de.julielab</groupId>

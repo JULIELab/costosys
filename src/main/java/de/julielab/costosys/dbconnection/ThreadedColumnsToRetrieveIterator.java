@@ -343,7 +343,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             } finally {
                 closeConnection();
             }
-            log.debug("{}} has finished", getName());
+            log.debug("{} has finished", getName());
         }
 
         /**

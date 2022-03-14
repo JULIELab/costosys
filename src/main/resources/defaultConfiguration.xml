@@ -37,8 +37,8 @@
 					   retrieve="true"/>
 			</tableSchema>
 			<tableSchema name="pubmed_gzip"
-				forEach="/PubmedArticleSet/PubmedArticle/MedlineCitation">
-				<field name="pmid" type="text" xpath="PMID" primaryKey="true"
+				forEach="/PubmedArticleSet/PubmedArticle">
+				<field name="pmid" type="text" xpath="PubmedData/ArticleIdList/ArticleId[@IdType='pubmed']" primaryKey="true"
 					retrieve="true"/>
 				<field name="xml" type="bytea" xpath="." returnXMLFragment="true"
 					retrieve="true" gzip="true"/>
@@ -49,6 +49,30 @@
 					   retrieve="true"/>
 				<field name="xml" type="xml" xpath="." returnXMLFragment="true"
 					   retrieve="true"/>
+			</tableSchema>
+			<tableSchema name="pmc_gzip"
+						 forEach="/article">
+				<field name="pmcid" type="text" xpath="front/article-meta/article-id[@pub-id-type='pmc']" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xml" type="bytea" completeXml="true"
+					   retrieve="true" gzip="true"/>
+			</tableSchema>
+			<tableSchema name="pmc"
+						 forEach="/article">
+				<field name="pmcid" type="text" xpath="front/article-meta/article-id[@pub-id-type='pmc']" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xml" type="xml" completeXml="true"
+					   retrieve="true"/>
+			</tableSchema>
+			<!-- In the PMC bulk downloads we had the issue at least once that a PMC document did not contain its own
+			ID in its XML data. This concerned document PMC5023793.xml. Since the bulk data contains the PMCID in the
+			file names, we just use that -->
+			<tableSchema name="pmc_bulk_gzip"
+						 forEach="/article">
+				<field name="pmcid" type="text" extractFromFileName="true" regex="(PMC[0-9]+).xml" replaceWith="$1" primaryKey="true"
+					   retrieve="true"/>
+				<field name="xml" type="bytea" completeXml="true"
+					   retrieve="true" gzip="true"/>
 			</tableSchema>
 			<tableSchema name="xmi_complete_cas" forEach=".">
 				<field name="docid" type="text" primaryKey="true"  retrieve="true"/>
