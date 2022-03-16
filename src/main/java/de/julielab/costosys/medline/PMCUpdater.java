@@ -13,6 +13,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -116,6 +119,7 @@ public class PMCUpdater {
     /**
      * Reads the filelist.txt file for the given XML archive file. Extracts the IDs that are marked as "retracted".
      * Note tha per PMC policy, retracted articles are not actually removed from PMC. So we might actually keep them, too.
+     *
      * @param file
      * @return
      * @see <url>https://www.ncbi.nlm.nih.gov/labs/pmc/about/guidelines/#retract</url>
@@ -150,10 +154,20 @@ public class PMCUpdater {
                 // the correct update-sequence. If we don't, it can happen that we
                 // process a newer update before an older which will then result in
                 // deprecated documents kept in the database.
-                // The files are named like "oa_comm_xml.incr.2022-01-07.tar.gz", i.e.
-                // their release date is part of the file name. We just
-                // have to sort by string comparison.
-                Collections.sort(unprocessedPmcUpdates, Comparator.comparing(File::getName));
+                // The files are named like "oa_comm_xml.PMC002xxxxxx.baseline.2022-03-04.tar.gz" for
+                // baseline files and "oa_comm_xml.incr.2022-01-07.tar.gz" for update files, i.e.
+                // their release date is part of the file name. First, sort the baseline files to the beginning,
+                // then simply use string comparison.
+                Collections.sort(unprocessedPmcUpdates, Comparator.comparing(File::getName, (n1, n2) -> {
+                    String baseline = "baseline";
+                    boolean n1ContainsBaseline = n1.contains(baseline);
+                    boolean n2ContainsBaseline = n2.contains(baseline);
+                    if (n1ContainsBaseline && ! n2ContainsBaseline)
+                        return -1;
+                    if (n2ContainsBaseline && !n1ContainsBaseline)
+                        return 1;
+                    return 0;
+                }).thenComparing(File::getName));
                 // Get the names of all deleters to be applied.
                 String[] configuredDeleters = configuration.getStringArray(dot(ConfigurationConstants.DELETION, ConfigurationConstants.DELETER));
                 for (File file : unprocessedPmcUpdates) {
@@ -187,19 +201,16 @@ public class PMCUpdater {
         }
     }
 
-    protected File[] getPMCFiles(String pathString) throws FileNotFoundException {
+    protected File[] getPMCFiles(String pathString) throws IOException {
         File pmcPath = new File(pathString);
         if (!pmcPath.exists())
             throw new FileNotFoundException("File \"" + pathString + "\" was not found.");
         if (!pmcPath.isDirectory())
             return new File[]{pmcPath};
-        File[] pmcFiles = pmcPath.listFiles(file -> {
-            String filename = file.getName();
-            return filename.endsWith("gz") || filename.endsWith("gzip") || filename.endsWith("zip") || filename.endsWith("tgz") || filename.endsWith("tar.gz");
-        });
+        File[] pmcFiles = Files.walk(Path.of(pathString), FileVisitOption.FOLLOW_LINKS).filter(p -> p.toString().endsWith("gz") || p.toString().endsWith("gzip") || p.toString().endsWith("zip") || p.toString().endsWith("tgz") || p.toString().endsWith("tar.gz")).map(Path::toFile).toArray(File[]::new);
         // Check whether anything has been read.
         if (pmcFiles == null || pmcFiles.length == 0) {
-            log.info("No (g)zipped files found in directory {}. No update will be performed.", pathString);
+            log.info("No files in ZIP, GZIP or TGZ format found in directory {}. No update will be performed.", pathString);
         }
         return pmcFiles;
     }
