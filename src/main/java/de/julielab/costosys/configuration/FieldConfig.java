@@ -46,6 +46,7 @@ public class FieldConfig extends ConfigBase {
     private List<Map<String, String>> fields;
     private Map<String, Map<String, String>> fieldNameMap;
     private String forEachXPath;
+    private boolean nsAware;
     private boolean binary;
     private String[] primaryKey;
     private String[] columns;
@@ -167,6 +168,10 @@ public class FieldConfig extends ConfigBase {
         return binary;
     }
 
+    public boolean isNsAware() {
+        return nsAware;
+    }
+
     private void buildFields(byte[] mergedConfData, String activeSchemeName)
             throws ParseException, XPathParseException, XPathEvalException, NavException {
         VTDGen vg = new VTDGen();
@@ -183,6 +188,9 @@ public class FieldConfig extends ConfigBase {
             int attrIndexB = vn.getAttrVal(JulieXMLConstants.BINARY);
             if (attrIndexB != -1)
                 binary = Boolean.parseBoolean(vn.toString(attrIndexB));
+            int attrIndexNs = vn.getAttrVal(JulieXMLConstants.NS_AWARE);
+            if (attrIndexNs != -1)
+                nsAware = Boolean.parseBoolean(vn.toString(attrIndexNs));
         }
 
         ap.selectXPath(String.format(XPATH_CONF_FIELD_TEMPLATE, activeSchemeName));

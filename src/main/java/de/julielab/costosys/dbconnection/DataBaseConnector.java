@@ -322,12 +322,12 @@ public class DataBaseConnector {
         LOG.debug("Changing database password.");
     }
 
-    public void setMaxConnections(int num) {
-        dbConfig.setMaxConnections(num);
-    }
-
     public int getMaxConnections() {
         return dbConfig.getMaxConnections();
+    }
+
+    public void setMaxConnections(int num) {
+        dbConfig.setMaxConnections(num);
     }
 
     /**
@@ -1515,9 +1515,10 @@ public class DataBaseConnector {
 
     /**
      * Drops the empty Postgres schema with given name.
+     *
      * @param schema The schema to be dropped.
      */
-    public boolean dropSchema(String schema) throws SQLException{
+    public boolean dropSchema(String schema) throws SQLException {
         try (CoStoSysConnection conn = obtainOrReserveConnection(true)) {
             Statement stmt = conn.createStatement();
             String sql = "DROP SCHEMA " + schema;
@@ -2324,7 +2325,7 @@ public class DataBaseConnector {
 
         for (byte[] xml : xmls) {
             Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(xml, BUFFER_SIZE,
-                    fieldConfig.getForEachXPath(), fieldConfig.getFields(), identifier);
+                    fieldConfig.getForEachXPath(), fieldConfig.getFields(), identifier, fieldConfig.isNsAware());
             importFromRowIterator(it, tableName);
         }
     }
@@ -2760,7 +2761,7 @@ public class DataBaseConnector {
                 // because following transactions would be blocked otherwise.
                 LOG.trace("Committing updates to the data table.");
                 if (commit)
-                externalConn.commit();
+                    externalConn.commit();
                 if (mirrorNames != null) {
                     LOG.trace("Applying updates to mirror subsets:");
                     List<Map<String, Object>> toInsertMirror = new ArrayList<>(commitBatchSize);
@@ -2776,7 +2777,7 @@ public class DataBaseConnector {
                             LOG.trace("Resetting updated rows.");
                             returned = resetSubset(externalConn, mirrorName, toResetPKs, schemaName);
                         } else {
-                            LOG.trace("Updates rows are NOT reset.");
+                            LOG.trace("Updated rows are NOT reset.");
                             returned = determineExistingSubsetRows(externalConn, mirrorName, toResetPKs, schemaName);
                         }
                         // Possibly some update documents don't even exist
@@ -2789,7 +2790,7 @@ public class DataBaseConnector {
                         if (toInsertMirror.size() > 0) {
                             LOG.trace("{} updated rows where not found in this mirror subset. They will be added", toInsertMirror.size());
                             // The mirror insert statements are a parallel list
-                            // to mirrorNames, thus the jth mirrorName belong to
+                            // to mirrorNames, thus the jth mirrorName belongs to
                             // the jth insert statement.
                             PreparedStatement mirrorPS = mirrorStatementsIt.next();
                             for (Map<String, Object> missingMirrorRow : toInsertMirror) {
@@ -4112,33 +4113,33 @@ public class DataBaseConnector {
      * @see #releaseConnections()
      * @see #reserveConnection(boolean)
      */
-     public CoStoSysConnection obtainConnection() {
-         synchronized (this) {
-             logConnectionAllocation();
-             Thread currentThread = Thread.currentThread();
-             LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
-             List<CoStoSysConnection> list;
-             try {
-                 list = connectionCache.get(currentThread);
-             } catch (ExecutionException e) {
-                 throw new RuntimeException(e);
-             }
-             cleanClosedReservedConnections(list, currentThread);
-             if (list.isEmpty())
-                 throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
-             // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
-             // a method can be sure that it reserves a connection for its subcalls.
-             CoStoSysConnection conn = null;
-             for (int i = list.size() - 1; i >= 0; --i) {
-                 if (list.get(i).isShared())
-                     conn = list.get(i);
-             }
-             if (conn == null)
-                 throw new IllegalStateException("There was no sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
-             LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
-             conn.incrementUsageNumber();
-             return conn;
-         }
+    public CoStoSysConnection obtainConnection() {
+        synchronized (this) {
+            logConnectionAllocation();
+            Thread currentThread = Thread.currentThread();
+            LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
+            List<CoStoSysConnection> list;
+            try {
+                list = connectionCache.get(currentThread);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+            cleanClosedReservedConnections(list, currentThread);
+            if (list.isEmpty())
+                throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
+            // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
+            // a method can be sure that it reserves a connection for its subcalls.
+            CoStoSysConnection conn = null;
+            for (int i = list.size() - 1; i >= 0; --i) {
+                if (list.get(i).isShared())
+                    conn = list.get(i);
+            }
+            if (conn == null)
+                throw new IllegalStateException("There was no sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
+            LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
+            conn.incrementUsageNumber();
+            return conn;
+        }
     }
 
     /**
@@ -4161,13 +4162,11 @@ public class DataBaseConnector {
      * <p>
      * Guaranteed to return either an already reserved connection or a newly reserved one. The <tt>newlyReserved</tt> property of the returned
      * object indicates whether the returned connection was newly reserved or not (<code>true</code> /
-     * <code>false</code>, respectively). To comfortably release the connection only when it was newly reserved, use
-     * {@link #releaseConnection(CoStoSysConnection)} or simply {@link CoStoSysConnection#decreaseUsageCounter()}.
+     * <code>false</code>, respectively). To comfortably release the connection only when it was newly reserved, just close the CostoSysConnection.
      * </p>
      *
      * @param shared Whether or not the returned connection can be shared.
      * @return A pair consisting of connection and the information if it was newly reserved or not.
-     * @see #releaseConnection(CoStoSysConnection)
      */
     public CoStoSysConnection obtainOrReserveConnection(boolean shared) {
         synchronized (this) {
@@ -4261,36 +4260,36 @@ public class DataBaseConnector {
      * @see #obtainConnection()
      * @see #releaseConnections()
      */
-     public CoStoSysConnection reserveConnection(boolean shared) {
-         synchronized (this) {
-             logConnectionAllocation();
+    public CoStoSysConnection reserveConnection(boolean shared) {
+        synchronized (this) {
+            logConnectionAllocation();
 
-             Thread currentThread = Thread.currentThread();
-             LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
-             List<CoStoSysConnection> list;
-             try {
-                 list = connectionCache.get(currentThread);
-             } catch (ExecutionException e) {
-                 throw new RuntimeException(e);
-             }
-             int listSize = list.size();
-             cleanClosedReservedConnections(list, currentThread);
-             if (LOG.isTraceEnabled() && list.size() < listSize) {
-                 LOG.trace("The list of connections for thread \"{}\" was shortened from {} to {} due to connections closed in the meantime.", currentThread.getName(), listSize, list.size());
-             }
-             if (list.size() == dbConfig.getMaxConnections())
-                 LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
-             Connection conn = getConn();
-             try {
-                 assert conn.getAutoCommit();
-             } catch (SQLException e) {
-                 throw new CoStoSysSQLRuntimeException(e);
-             }
-             CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, shared);
-             list.add(costoConn);
-             LOG.trace("Reserving connection {} with internal connection {} for thread \"{}\". This thread has now {} connections reserved.", costoConn, conn, currentThread.getName(), list.size());
-             return costoConn;
-         }
+            Thread currentThread = Thread.currentThread();
+            LOG.trace("Trying to reserve a connection for thread \"{}\"", currentThread.getName());
+            List<CoStoSysConnection> list;
+            try {
+                list = connectionCache.get(currentThread);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+            int listSize = list.size();
+            cleanClosedReservedConnections(list, currentThread);
+            if (LOG.isTraceEnabled() && list.size() < listSize) {
+                LOG.trace("The list of connections for thread \"{}\" was shortened from {} to {} due to connections closed in the meantime.", currentThread.getName(), listSize, list.size());
+            }
+            if (list.size() == dbConfig.getMaxConnections())
+                LOG.warn("The current thread \"" + currentThread.getName() + "\" has already reserved " + list.size() + " connections. The connection pool is of size " + dbConfig.getMaxConnections() + ". Cannot reserve another connection. Call releaseConnections() to free reserved connections back to the pool. It will be tried to obtain a connection by waiting for one to get free. This might end in a timeout error.");
+            Connection conn = getConn();
+            try {
+                assert conn.getAutoCommit();
+            } catch (SQLException e) {
+                throw new CoStoSysSQLRuntimeException(e);
+            }
+            CoStoSysConnection costoConn = new CoStoSysConnection(this, conn, shared);
+            list.add(costoConn);
+            LOG.trace("Reserving connection {} with internal connection {} for thread \"{}\". This thread has now {} connections reserved.", costoConn, conn, currentThread.getName(), list.size());
+            return costoConn;
+        }
     }
 
     private void logConnectionAllocation() {
@@ -4312,28 +4311,28 @@ public class DataBaseConnector {
      * @see #reserveConnection(boolean)
      * @see #obtainConnection()
      */
-     public void releaseConnections() {
-         synchronized (this) {
-             Thread currentThread = Thread.currentThread();
-             LOG.trace("Releasing all connections held for Thread \"{}\"", currentThread.getName());
-             List<CoStoSysConnection> connectionList;
-             try {
-                 connectionList = connectionCache.get(currentThread);
-             } catch (ExecutionException e) {
-                 throw new RuntimeException(e);
-             }
-             for (CoStoSysConnection conn : connectionList) {
-                 try {
-                     if (!conn.getConnection().isClosed()) {
-                         LOG.trace("Closing connection {}", conn.getConnection());
-                         conn.getConnection().close();
-                     }
-                 } catch (SQLException e) {
-                     LOG.error("Could not release connection back to the pool", e);
-                 }
-             }
-             connectionList.clear();
-         }
+    public void releaseConnections() {
+        synchronized (this) {
+            Thread currentThread = Thread.currentThread();
+            LOG.trace("Releasing all connections held for Thread \"{}\"", currentThread.getName());
+            List<CoStoSysConnection> connectionList;
+            try {
+                connectionList = connectionCache.get(currentThread);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+            for (CoStoSysConnection conn : connectionList) {
+                try {
+                    if (!conn.getConnection().isClosed()) {
+                        LOG.trace("Closing connection {}", conn.getConnection());
+                        conn.getConnection().close();
+                    }
+                } catch (SQLException e) {
+                    LOG.error("Could not release connection back to the pool", e);
+                }
+            }
+            connectionList.clear();
+        }
     }
 
     public Object withConnectionQuery(DbcQuery<?> command) {
@@ -4434,7 +4433,6 @@ public class DataBaseConnector {
     }
 
 
-
     public enum StatusElement {HAS_ERRORS, IS_PROCESSED, IN_PROCESS, TOTAL, LAST_COMPONENT}
 
     /**
@@ -4470,7 +4468,7 @@ public class DataBaseConnector {
                 hugeFile = true;
             }
             return JulieXMLTools.constructRowIterator(xmlFilePath, BUFFER_SIZE, fieldConfig.getForEachXPath(),
-                    fieldConfig.getFields(), hugeFile);
+                    fieldConfig.getFields(), hugeFile, fieldConfig.isNsAware());
 
         }
 

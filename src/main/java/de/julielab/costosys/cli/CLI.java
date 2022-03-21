@@ -909,7 +909,7 @@ public class CLI {
 
         String[][] retStrings = new String[xpathArray.length][];
 
-        Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(next, 1024, ".", fields, "your result");
+        Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(next, 1024, ".", fields, "your result", false);
         if (it.hasNext()) {
             Map<String, Object> row = it.next();
             for (int i = 0; i < xpathArray.length; i++) {
