@@ -2765,16 +2765,19 @@ public class DataBaseConnector {
                 if (mirrorNames != null) {
                     LOG.trace("Applying updates to mirror subsets:");
                     List<Map<String, Object>> toInsertMirror = new ArrayList<>(commitBatchSize);
+                    // mirrorNames is a LinkedHashSet and the mirrorStatements have been created by iterating over
+                    // the keys in mirrorNames - thus, the two collections are ordered and parallel.
                     Iterator<String> mirrorNamesIt = mirrorNames.keySet().iterator();
                     Iterator<PreparedStatement> mirrorStatementsIt = mirrorStatements.iterator();
-                    for (int j = 0; j < mirrorNames.size(); j++) {
+                    while(mirrorNamesIt.hasNext()) {
                         String mirrorName = mirrorNamesIt.next();
+                        PreparedStatement mirrorPS = mirrorStatementsIt.next();
                         LOG.trace("Applying to mirror subset \"{}\"", mirrorName);
                         // The mirrorNames hashmap has as values booleans telling
                         // whether to reset a mirror table or not. If not, we still want
                         // to know whether there are any missing rows and insert them.
                         if (mirrorNames.get(mirrorName)) {
-                            LOG.trace("Resetting updated rows.");
+                            LOG.trace("Resetting updated rows in mirror subset {}.", mirrorName);
                             returned = resetSubset(externalConn, mirrorName, toResetPKs, schemaName);
                         } else {
                             LOG.trace("Updated rows are NOT reset.");
@@ -2788,11 +2791,10 @@ public class DataBaseConnector {
                         // re-import it.
                         fillUpdateLists(toResetRows, returned, toInsertMirror, null, null, fieldConfig);
                         if (toInsertMirror.size() > 0) {
-                            LOG.trace("{} updated rows where not found in this mirror subset. They will be added", toInsertMirror.size());
+                            LOG.trace("{} updated rows were not found in mirror subset {}. They will be added", toInsertMirror.size(), mirrorName);
                             // The mirror insert statements are a parallel list
                             // to mirrorNames, thus the jth mirrorName belongs to
                             // the jth insert statement.
-                            PreparedStatement mirrorPS = mirrorStatementsIt.next();
                             for (Map<String, Object> missingMirrorRow : toInsertMirror) {
                                 for (int k = 0; k < fieldConfig.getPrimaryKey().length; k++) {
                                     String fieldName = fieldConfig.getPrimaryKey()[k];
