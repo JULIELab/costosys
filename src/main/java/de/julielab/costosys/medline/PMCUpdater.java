@@ -258,6 +258,7 @@ public class PMCUpdater {
                         "UPDATE %s SET %s = TRUE, %s = '" + new Timestamp(System.currentTimeMillis()) + "' WHERE %s = '%s'",
                         UPDATE_TABLE, COLUMN_IS_IMPORTED, COLUMN_TIMESTAMP, COLUMN_FILENAME, file.getName());
                 conn.createStatement().execute(sql);
+                conn.commit();
             } catch (SQLException e) {
                 log.error("SQL command was: {}", sql);
                 throw new MedlineUpdateException(e);
