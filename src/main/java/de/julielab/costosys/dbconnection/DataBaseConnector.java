@@ -417,7 +417,7 @@ public class DataBaseConnector {
                         LOG.debug("Could not retrieve connection pool statistics:", t);
                     }
                     printConnectionPoolStatus();
-                    if (retries == 3) {
+                    if (retries == 5) {
                         throw e;
                     }
                 }
@@ -1561,8 +1561,9 @@ public class DataBaseConnector {
             // automatically when the tables are created. Thus, when not
             // lowercasing we risk to miss the correct entry.
             String sql = String.format(
-                    "select schemaname,tablename from pg_tables where schemaname = '%s' and tablename = '%s'",
-                    schemaName.toLowerCase(), pureTableName.toLowerCase());
+                    "select schemaname,tablename as name from pg_tables where schemaname = '%s' and tablename = '%s' union "+
+                    "select schemaname,viewname as name from pg_views where schemaname = '%s' and viewname = '%s'",
+                    schemaName.toLowerCase(), pureTableName.toLowerCase(), schemaName.toLowerCase(), pureTableName.toLowerCase());
             LOG.trace("Checking whether table {} in schema {} exists.", pureTableName, schemaName);
             LOG.trace("Sent query (names have been lowercased to match Postgres table names): {}", sql);
             ResultSet res = stmt.executeQuery(sql);
