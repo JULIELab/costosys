@@ -18,6 +18,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Exchanger;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.zip.ZipException;
@@ -98,6 +100,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
      */
     @Override
     public void close() {
+        LOG.debug("Iterator with background thread {} is closing.", ((Thread)backgroundThread).getName());
         ((ArrayResToListThread) backgroundThread).end();
     }
 
@@ -124,7 +127,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         private final Logger log = LoggerFactory.getLogger(ArrayResToListThread.class);
         private final ArrayFromDBThread arrayFromDBThread;
         private Exchanger<List<byte[][]>> listExchanger;
-        private Exchanger<ResultSet> resExchanger = new Exchanger<ResultSet>();
+        private Exchanger<ResultSet> resExchanger = new Exchanger<>();
         private ResultSet currentRes;
         private ArrayList<byte[][]> currentList;
         private String[] schemaName;
@@ -187,12 +190,18 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                     // continue fetching more documents from the database
                     // below, allowing the calling program to process the
                     // current result and already fetching the next
-                    if (!currentList.isEmpty())
+                    if (!currentList.isEmpty()) {
+                        log.debug("Sending current result list of size {} to iterator", currentList.size());
                         listExchanger.exchange(currentList);
+                    }
                     // Get the next ResultSet from the database
                     currentRes = resExchanger.exchange(null);
                 }
+                log.debug("Signalling end of data to iterator (data for all keys received)");
+                final Timer t = new Timer(getName());
+                t.start();
                 listExchanger.exchange(null); // stop signal
+                t.interrupt();
             } catch (InterruptedException | SQLException | IOException e) {
                 log.error(
                         "Exception occurred while reading " + "data from result set, index {}. "
@@ -206,7 +215,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
                         new Object[]{i, fields.get(i), retrievedData != null ? retrievedData[i] : null});
                 throw e;
             }
-            log.debug("ArrayResToListThread has finished");
+            log.debug("{} has finished", getName());
         }
 
         /**
@@ -214,6 +223,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
          * continue querying the database.
          */
         public void end() {
+            log.debug("Ending thread {}", getName());
             arrayFromDBThread.end();
             end = true;
         }
@@ -358,7 +368,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
             try {
                 queryBuilder.delete(0, queryBuilder.capacity());
                 Statement stmt = conn.createStatement();
-                List<String> pkConjunction = new ArrayList<String>();
+                List<String> pkConjunction = new ArrayList<>();
                 for (int i = 0; keyIter.hasNext() && i < dbc.getQueryBatchSize(); ++i) {
                     // get the next row of primary key values, e.g.
                     //
@@ -410,6 +420,24 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         public void closeConnection() {
             log.trace("Closing connection {}", conn.getConnection());
             conn.close();
+        }
+    }
+    private class Timer extends Thread {
+        private String threadName;
+
+        public Timer(String threadName) {
+
+            this.threadName = threadName;
+        }
+
+        @Override
+        public void run() {
+            try {
+                Thread.sleep(300000);
+            LOG.error("Waited 5 minutes for iterator for thread {}", threadName);
+            } catch (InterruptedException e) {
+                // that's alright
+            }
         }
     }
 }
