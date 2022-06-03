@@ -434,7 +434,7 @@ public class ThreadedColumnsToRetrieveIterator extends DBCThreadedIterator<byte[
         public void run() {
             try {
                 Thread.sleep(300000);
-            LOG.error("Waited 5 minutes for iterator for thread {}", threadName);
+            LOG.debug("Waited 5 minutes for iterator for thread {}", threadName);
             } catch (InterruptedException e) {
                 // that's alright
             }

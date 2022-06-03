@@ -45,7 +45,6 @@ public abstract class DBCThreadedIterator<E> extends DBCIterator<E> {
 		E next = currentListIter.next();
 		if (!currentListIter.hasNext())
 			update();
-		log.debug("Returning item nr {} from {}: {}", returned++, currentSize, new String(((byte[][])next)[0]));
 		return next;
 	}
 
