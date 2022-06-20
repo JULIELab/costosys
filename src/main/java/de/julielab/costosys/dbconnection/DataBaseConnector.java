@@ -2919,7 +2919,7 @@ public class DataBaseConnector {
                 valuesStrBuilder.append(",");
             }
         }
-        return String.format(stmtTemplate, tableName, columnsStrBuilder.toString(), valuesStrBuilder.toString());
+        return String.format(stmtTemplate, tableName, columnsStrBuilder, valuesStrBuilder);
     }
 
 

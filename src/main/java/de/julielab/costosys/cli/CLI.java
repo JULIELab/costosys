@@ -25,9 +25,11 @@ import de.julielab.costosys.dbconnection.util.CoStoSysRuntimeException;
 import de.julielab.costosys.medline.PMCUpdater;
 import de.julielab.costosys.medline.PubmedUpdater;
 import de.julielab.java.utilities.CLIInteractionUtilities;
+import de.julielab.java.utilities.FileUtilities;
 import de.julielab.java.utilities.IOStreamUtilities;
 import de.julielab.xml.JulieXMLConstants;
 import de.julielab.xml.JulieXMLTools;
+import de.julielab.xml.XmiSplitConstants;
 import org.apache.commons.cli.*;
 import org.apache.commons.configuration2.XMLConfiguration;
 import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
@@ -137,6 +139,8 @@ public class CLI {
                 mode = Mode.PRINT_VERSION;
             if (cmd.hasOption("dr"))
                 mode = Mode.DELETE_ROWS;
+            if (cmd.hasOption("ux"))
+                mode = Mode.UPDATE_XMI;
 
             if (mode == Mode.PRINT_VERSION) {
                 printVersion();
@@ -385,6 +389,11 @@ public class CLI {
                     case DELETE_ROWS:
                         Path idFilePath = Path.of(cmd.getOptionValue("dr"));
                         deleteRows(dbc, idFilePath, superTableName);
+                        break;
+
+                    case UPDATE_XMI:
+                        final XmiColumnDataInserter xmiColumnDataInserter = new XmiColumnDataInserter();
+                        xmiColumnDataInserter.insertXmiColumnData(Path.of(fileStr), superTableName, cmd.getOptionValue("ux"), dbc);
                         break;
 
                     case ERROR:
@@ -798,7 +807,7 @@ public class CLI {
                         if (null != baseOutFile) {
                             logMessage(
                                     "Creating a single file with a PubmedArticleSet and writing it to " + baseOutFile);
-                            bw = new BufferedWriter(new FileWriter(baseOutFile));
+                            bw = FileUtilities.getWriterToFile(new File(baseOutFile));
                         }
                         print("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 + "<!DOCTYPE PubmedArticleSet SYSTEM \"http://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_170101.dtd\">\n"
@@ -831,17 +840,24 @@ public class CLI {
                             if (!pubmedArticleSet) {
                                 if (bw != null)
                                     bw.close();
-                                bw = new BufferedWriter(new FileWriter(outDir + FILE_SEPERATOR + filename));
+                                bw = FileUtilities.getWriterToFile(new File(outDir + FILE_SEPERATOR + filename));
                             }
                         }
+                        final boolean retrieveBaseDocument = Set.of(dbc.getActiveTableFieldConfiguration().getColumnsToRetrieve()).contains(XmiSplitConstants.BASE_DOC_COLUMN);
                         if (xpath == null) {
                             StringBuilder sb = new StringBuilder();
                             if (pubmedArticleSet)
                                 sb.append("<PubmedArticle>\n");
+                            if (!retrieveBaseDocument) {
+                                sb.append("<CoStoSysPrimaryKey>").append(new String(idAndXML[0])).append("</CoStoSysPrimaryKey>");
+                                sb.append("<xmidata>");
+                            }
                             if (!dbc.getActiveTableFieldConfiguration().isBinary())
                                 sb.append(new String(idAndXML[1], "UTF-8"));
-                            else
-                                sb.append(binaryDataHandler.decodeBinaryXmiData(idAndXML));
+                            else// omit valid XMI introduction with xml declaration and namespaces when we just get some annotation data
+                                sb.append(binaryDataHandler.decodeBinaryXmiData(idAndXML, retrieveBaseDocument));
+                            if (!retrieveBaseDocument)
+                                sb.append("</xmidata>");
                             if (pubmedArticleSet)
                                 sb.append("\n</PubmedArticle>");
                             print(sb.toString(), bw);
@@ -850,10 +866,15 @@ public class CLI {
                             // array of Strings holding the values for this
                             // XPath (e.g. the AuthorList mostly yields several
                             // values).
-                            String[][] values = getXpathValues(idAndXML[1], xpath);
+                            List<String[]> values;
+                            if (!dbc.getActiveTableFieldConfiguration().isBinary())
+                                values = getXpathValues(idAndXML[1], xpath, new String(idAndXML[0]));
+                            else {
+                                final String xml = binaryDataHandler.decodeBinaryXmiData(idAndXML, retrieveBaseDocument);
+                                values = getXpathValues(xml.getBytes(StandardCharsets.UTF_8), xpath, new String(idAndXML[0]));
+                            }
                             for (String[] valuesOfXpath : values)
-                                for (String singleValue : valuesOfXpath)
-                                    print(singleValue, bw);
+                                print(String.join("\t", valuesOfXpath), bw);
                         }
                         if (useDelimiter)
                             System.out.println(DELIMITER);
@@ -894,39 +915,46 @@ public class CLI {
             bw.write(string + "\n");
     }
 
-    private static String[][] getXpathValues(byte[] next, String xpaths) {
+    private static List<String[]> getXpathValues(byte[] next, String xpaths, String docId) {
 
         String[] xpathArray = xpaths.split(",");
+        String forEachXpath = ".";
         List<Map<String, String>> fields = new ArrayList<Map<String, String>>();
+        List<String> fieldXpaths = new ArrayList<>();
         for (String xpath : xpathArray) {
-            Map<String, String> field = new HashMap<String, String>();
-            field.put(JulieXMLConstants.NAME, xpath);
-            field.put(JulieXMLConstants.XPATH, xpath);
-            field.put(JulieXMLConstants.RETURN_XML_FRAGMENT, "true");
-            field.put(JulieXMLConstants.RETURN_ARRAY, "true");
-            fields.add(field);
+            if (xpath.startsWith("fe:")) {
+                forEachXpath = xpath.replace("fe:", "");
+            } else {
+                Map<String, String> field = new HashMap<>();
+                field.put(JulieXMLConstants.NAME, xpath);
+                field.put(JulieXMLConstants.XPATH, xpath);
+                field.put(JulieXMLConstants.RETURN_XML_FRAGMENT, "false");
+                field.put(JulieXMLConstants.RETURN_ARRAY, "true");
+                fields.add(field);
+                fieldXpaths.add(xpath);
+            }
         }
 
-        String[][] retStrings = new String[xpathArray.length][];
+        List<String[]> retStrings = new ArrayList<>();
 
-        Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(next, 1024, ".", fields, "your result", false);
-        if (it.hasNext()) {
+        Iterator<Map<String, Object>> it = JulieXMLTools.constructRowIterator(next, 1024, forEachXpath, fields, docId, true);
+        while (it.hasNext()) {
             Map<String, Object> row = it.next();
-            for (int i = 0; i < xpathArray.length; i++) {
+            String[] resultRow = new String[fieldXpaths.size() + 1];
+            resultRow[0] = docId;
+            for (int i = 0; i < fieldXpaths.size(); i++) {
                 // Get the field "xpath" which was given as field name above; we
                 // wanted multiple results to be returned in an array.
-                String[] values = (String[]) row.get(xpathArray[i]);
-                if (values == null)
-                    values = new String[]{"XPath " + xpaths + " does not exist in this document."};
-                retStrings[i] = values;
+                Object fieldValue = row.get(fieldXpaths.get(i));
+                if (fieldValue == null)
+                    fieldValue = "XPath " + xpaths + " does not exist in this document.";
+                else if (fieldValue.getClass().isArray())
+                    fieldValue = String.join(",", (String[]) fieldValue);
+                else
+                    fieldValue = String.valueOf(fieldValue);
+                resultRow[i + 1] = (String) fieldValue;
             }
-            if (it.hasNext()) {
-                // What happened? We wanted all values in one array, so this
-                // should not happen.
-                LOG.warn(
-                        "There are more results for the XPath {} then expected and not all have been returned. Please contact a developer for help.",
-                        xpaths);
-            }
+            retStrings.add(resultRow);
         }
         return retStrings;
     }
@@ -1007,6 +1035,6 @@ public class CLI {
     }
 
     private enum Mode {
-        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, DELETE_ROWS, IMPORT_UPDATE_MEDLINE, IMPORT_UPDATE_PMC, MARK_PROCESSED, PRINT_VERSION
+        IMPORT, QUERY, SUBSET, RESET, STATUS, ERROR, TABLES, LIST_TABLE_SCHEMAS, TABLE_DEFINITION, SCHEME, CHECK, DEFAULT_CONFIG, DROP_TABLE, DELETE_ROWS, IMPORT_UPDATE_MEDLINE, IMPORT_UPDATE_PMC, MARK_PROCESSED, UPDATE_XMI, PRINT_VERSION
     }
 }

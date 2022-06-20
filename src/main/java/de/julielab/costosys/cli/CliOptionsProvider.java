@@ -163,6 +163,11 @@ public class CliOptionsProvider {
         modes.addOption(buildOption("dr", "delete-rows", "Deletes rows from tables whose IDs are in the delivered file in the specified table.\n" +
                 "Use -z to specify the target table.", "ID file"));
 
+        modes.addOption(buildOption("ux", "update-xmi", "Updates the XMI data of a single column given a file that adheres to a specific XML format.\n" +
+                "To create a file with that format, use the query mode (-q) on an XMI column and output with the -out and -pas parameters.\n" +
+                "Use the -z parameter to specify the XMI data table to update.\n" +
+                "Use the -f parameter to specify the input file that adheres to the required input format.", "XMI data column name"));
+
         modes.setRequired(true);
 
         options.addOptionGroup(modes);

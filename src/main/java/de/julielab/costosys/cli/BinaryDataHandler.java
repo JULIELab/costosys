@@ -21,7 +21,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -38,11 +37,10 @@ public class BinaryDataHandler {
     private TypeSystem typeSystem;
 
     /**
-     *
-     * @param dbc A DatabaseConnector instance.
-     * @param xmiMetaSchema The Postgres schema in which the XMI namespace table is located.
+     * @param dbc                     A DatabaseConnector instance.
+     * @param xmiMetaSchema           The Postgres schema in which the XMI namespace table is located.
      * @param annotationColumnsToLoad The names of XMI table columns where annotation modules are stored and should be retrieved.
-     * @param typeSystemFiles UIMA type system descriptor files that hold the types contained in the loaded data.
+     * @param typeSystemFiles         UIMA type system descriptor files that hold the types contained in the loaded data.
      * @throws CoStoSysException If the type systems cannot be loaded.
      */
     public BinaryDataHandler(DataBaseConnector dbc, String xmiMetaSchema, Set<String> annotationColumnsToLoad, List<File> typeSystemFiles) throws CoStoSysException {
@@ -70,7 +68,7 @@ public class BinaryDataHandler {
         return JCasFactory.createJCas(tsDesc).getTypeSystem();
     }
 
-    public String decodeBinaryXmiData(byte[][] data) throws CoStoSysException {
+    public String decodeBinaryXmiData(byte[][] data, boolean makeValidXml) throws CoStoSysException {
         final FieldConfig fieldConfig = dbc.getActiveTableFieldConfiguration();
         final int pkLength = fieldConfig.getPrimaryKey().length;
         LinkedHashMap<String, InputStream> xmiData = new LinkedHashMap<>();
@@ -91,7 +89,7 @@ public class BinaryDataHandler {
         BinaryJeDISNodeDecoder binaryJeDISNodeDecoder = new BinaryJeDISNodeDecoder(annotationColumnsToLoad, true);
         try {
             final BinaryDecodingResult decodingResult = binaryJeDISNodeDecoder.decode(xmiData, typeSystem, reverseBinaryMapping, featuresToMapBinary, binaryBuilder.getNamespaces());
-            ByteArrayOutputStream baos = binaryBuilder.buildXmi(decodingResult);
+            ByteArrayOutputStream baos = binaryBuilder.buildXmi(decodingResult, makeValidXml);
             return baos.toString(StandardCharsets.UTF_8);
         } catch (IOException | XMIBuilderException e) {
             throw new CoStoSysException(e);
