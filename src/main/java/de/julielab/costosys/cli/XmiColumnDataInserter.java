@@ -1,19 +1,29 @@
 package de.julielab.costosys.cli;
 
+import com.ximpleware.AutoPilot;
+import com.ximpleware.VTDGen;
+import com.ximpleware.VTDNav;
 import de.julielab.costosys.dbconnection.CoStoSysConnection;
 import de.julielab.costosys.dbconnection.DataBaseConnector;
 import de.julielab.java.utilities.FileUtilities;
 import de.julielab.xml.JulieXMLConstants;
+import de.julielab.xml.JulieXMLTools;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.PreparedStatement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -30,11 +40,16 @@ public class XmiColumnDataInserter {
     private static final Pattern XMI_DATA_TAG_PATTERN = Pattern.compile("</?xmidata>");
 
     public void insertXmiColumnData(Path xmiColumnData, String superTable, String columnName, DataBaseConnector dbc) throws Exception {
+        final ExecutorService executorService = Executors.newFixedThreadPool(6);
         try (final CoStoSysConnection costoConn = dbc.obtainOrReserveConnection()) {
             costoConn.setAutoCommit(false);
             int processedDocuments = 0;
+            List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
             try (final BufferedReader bw = FileUtilities.getReaderFromFile(xmiColumnData.toFile())) {
-                final boolean isXmlField = dbc.getActiveTableFieldConfiguration().getField(columnName).get(JulieXMLConstants.TYPE).equals("xml");
+                final Map<String, String> field = dbc.getActiveTableFieldConfiguration().getField(columnName);
+                if (field == null)
+                    throw new IllegalArgumentException("The active table configuration does not contain a field named '" + columnName + "'.");
+                final boolean isXmlField = field.get(JulieXMLConstants.TYPE).equals("xml");
                 final String pkFieldName = dbc.getActiveTableFieldConfiguration().getPrimaryKeyString();
                 String updateSql = "UPDATE " + superTable + " SET " + columnName + "=" + (isXmlField ? "XMLPARSE(CONTENT ?)" : "?") + " WHERE " + pkFieldName + "=?";
                 final PreparedStatement ps = costoConn.prepareStatement(updateSql);
@@ -46,16 +61,34 @@ public class XmiColumnDataInserter {
                 int linesRead = 0;
                 while ((line = bw.readLine()) != null) {
                     ++linesRead;
+                    if (linesRead % 1000000 == 0)
+                        log.debug("Read {} lines from the input file.", linesRead);
                     if (line.equals(PMA_START)) {
                         inArticle = true;
                         continue;
                     } else if (line.equals(PMA_END)) {
-                        addCurrentDocumentToBatch(currentDocument, ps, doGzip);
+                        final String docString = currentDocument.toString();
                         currentDocument.setLength(0);
+                        executorService.submit(() -> {
+                            try {
+                                addCurrentDocumentToBatch(docString, batch, doGzip);
+                            } catch (Exception e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
                         ++currentBatchSize;
-                        if (currentBatchSize == BATCH_SIZE) {
-                            ps.executeBatch();
-                            currentBatchSize = 0;
+
+                        synchronized (batch) {
+                            if (batch.size() >= BATCH_SIZE) {
+                                for (Object[] s : batch) {
+                                    ps.setObject(1, s[0]);
+                                    ps.setObject(2, s[1]);
+                                    ps.addBatch();
+                                }
+                                batch.clear();
+                                ps.executeBatch();
+                                currentBatchSize = 0;
+                            }
                         }
                         inArticle = false;
                         ++processedDocuments;
@@ -64,11 +97,20 @@ public class XmiColumnDataInserter {
                     if (inArticle) {
                         currentDocument.append(line);
                     }
-                    if (linesRead % 1000000 == 0)
-                        log.debug("Read {} lines from the input file.", linesRead);
                 }
-                if (currentBatchSize > 0)
-                    ps.executeBatch();
+                executorService.shutdown();
+                executorService.awaitTermination(10, TimeUnit.MINUTES);
+                synchronized (batch) {
+                    if (batch.size() > 0) {
+                        log.info("Sending last, incomplete batch with annotations for {} documents to database", batch.size());
+                        for (Object[] s : batch) {
+                            ps.setObject(1, s[0]);
+                            ps.setObject(2, s[1]);
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
             }
             costoConn.commit();
             log.info("Updated XMI data for {} documents.", processedDocuments);
@@ -76,8 +118,7 @@ public class XmiColumnDataInserter {
     }
 
 
-    private void addCurrentDocumentToBatch(StringBuffer currentDocument, PreparedStatement ps, boolean doGzip) throws Exception {
-        final String docString = currentDocument.toString();
+    private void addCurrentDocumentToBatch(String docString, List<Object[]> batch, boolean doGzip) throws Exception {
         final Matcher pkMatcher = PK_PATTERN.matcher(docString);
         if (!pkMatcher.find())
             throw new IllegalArgumentException("Input data does not match the required input format. The document ID - that should be enclosed in the tags '" + CSTS_PK_START + "' and '" + CSTS_PK_END + "' - could not be found.");
@@ -89,14 +130,22 @@ public class XmiColumnDataInserter {
             final ByteArrayInputStream bais = new ByteArrayInputStream(pureXmiData.getBytes(StandardCharsets.UTF_8));
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             try (GZIPOutputStream gos = new GZIPOutputStream(baos)) {
-                IOUtils.copy(bais, gos);
+                copyInputStream(bais, gos);
             }
             columnDataToInsert = baos.toByteArray();
         } else {
             columnDataToInsert = pureXmiData;
         }
-        ps.setObject(1, columnDataToInsert);
-        ps.setString(2, docId);
-        ps.addBatch();
+        synchronized (batch) {
+            batch.add(new Object[]{columnDataToInsert, docId});
+        }
+    }
+
+    private void copyInputStream(InputStream bais, OutputStream gos) throws IOException {
+        byte[] b = new byte[4096];
+        int n;
+        while ((n = bais.read(b)) != -1) {
+            gos.write(b, 0, n);
+        }
     }
 }

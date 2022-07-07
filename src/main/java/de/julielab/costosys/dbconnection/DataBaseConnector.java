@@ -1561,8 +1561,8 @@ public class DataBaseConnector {
             // automatically when the tables are created. Thus, when not
             // lowercasing we risk to miss the correct entry.
             String sql = String.format(
-                    "select schemaname,tablename as name from pg_tables where schemaname = '%s' and tablename = '%s' union "+
-                    "select schemaname,viewname as name from pg_views where schemaname = '%s' and viewname = '%s'",
+                    "select schemaname,tablename as name from pg_tables where schemaname = '%s' and tablename = '%s' union " +
+                            "select schemaname,viewname as name from pg_views where schemaname = '%s' and viewname = '%s'",
                     schemaName.toLowerCase(), pureTableName.toLowerCase(), schemaName.toLowerCase(), pureTableName.toLowerCase());
             LOG.trace("Checking whether table {} in schema {} exists.", pureTableName, schemaName);
             LOG.trace("Sent query (names have been lowercased to match Postgres table names): {}", sql);
@@ -2770,7 +2770,7 @@ public class DataBaseConnector {
                     // the keys in mirrorNames - thus, the two collections are ordered and parallel.
                     Iterator<String> mirrorNamesIt = mirrorNames.keySet().iterator();
                     Iterator<PreparedStatement> mirrorStatementsIt = mirrorStatements.iterator();
-                    while(mirrorNamesIt.hasNext()) {
+                    while (mirrorNamesIt.hasNext()) {
                         String mirrorName = mirrorNamesIt.next();
                         PreparedStatement mirrorPS = mirrorStatementsIt.next();
                         LOG.trace("Applying to mirror subset \"{}\"", mirrorName);
@@ -4108,28 +4108,28 @@ public class DataBaseConnector {
     }
 
     /**
-     * Returns the connection associated with the current thread object. To release used connections back to the connection pool, call {@link #releaseConnections()}.
+     * Returns the connection associated with the current thread object if it exists.
      *
-     * @return A connection associated with the current thread.
+     * @return A connection associated with the current thread. Can be null if no shared connection for this thread is available.
      * @throws IllegalStateException If there are no reserved connections for the current thread.
      * @see #obtainOrReserveConnection(boolean)
      * @see #releaseConnections()
      * @see #reserveConnection(boolean)
      */
     public CoStoSysConnection obtainConnection() {
+        logConnectionAllocation();
+        Thread currentThread = Thread.currentThread();
+        LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
+        List<CoStoSysConnection> list;
+        try {
+            list = connectionCache.get(currentThread);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
         synchronized (this) {
-            logConnectionAllocation();
-            Thread currentThread = Thread.currentThread();
-            LOG.trace("Trying to obtain previously reserved connection for thread {}", currentThread.getName());
-            List<CoStoSysConnection> list;
-            try {
-                list = connectionCache.get(currentThread);
-            } catch (ExecutionException e) {
-                throw new RuntimeException(e);
-            }
             cleanClosedReservedConnections(list, currentThread);
-            if (list.isEmpty())
-                throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
+//            if (list.isEmpty())
+//                throw new NoReservedConnectionException("There are no reserved connections for the current thread with name \"" + currentThread.getName() + "\". You need to call reserveConnection() before obtaining one.");
             // Return the newest connection. The idea is to stick "closer" to the time the connection was reserved so that
             // a method can be sure that it reserves a connection for its subcalls.
             CoStoSysConnection conn = null;
@@ -4137,9 +4137,8 @@ public class DataBaseConnector {
                 if (list.get(i).isShared())
                     conn = list.get(i);
             }
-            if (conn == null)
-                throw new IllegalStateException("There was no sharable connection available. Check before if there are connections that be shared via getNumReservedConnections(true).");
             LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
+            if (conn != null)
             conn.incrementUsageNumber();
             return conn;
         }
@@ -4175,15 +4174,21 @@ public class DataBaseConnector {
         synchronized (this) {
             LOG.trace("Connection requested, obtained or newly reserved");
             CoStoSysConnection connection;
-            // Only count connections that can be shared
-            int sharableReservedConnections = getNumReservedConnections(true);
-            if (sharableReservedConnections == 0) {
-                connection = reserveConnection(shared);
-            } else {
-                connection = obtainConnection();
-                if (LOG.isTraceEnabled())
-                    LOG.trace("There are shareable connections available, obtained {} with internal connection {}", connection, connection.getConnection());
+            // We use a loop because due to concurrency it might happen that a shared connection has been closed
+            // after retrieving it (closing is not synchronized to avoid deadlocks). Thus, we check if the
+            // retrieved connection can be used and, if not, try again.
+            do {
+                // Only count connections that can be shared
+                int sharableReservedConnections = getNumReservedConnections(true);
+                if (sharableReservedConnections == 0) {
+                    connection = reserveConnection(shared);
+                } else {
+                    connection = obtainConnection();
+                    if (LOG.isTraceEnabled())
+                        LOG.trace("There are shareable connections available, obtained {} with internal connection {}", connection, connection.getConnection());
+                }
             }
+            while (connection == null || connection.isClosed());
             return connection;
         }
     }
