@@ -4137,9 +4137,9 @@ public class DataBaseConnector {
                 if (list.get(i).isShared())
                     conn = list.get(i);
             }
-            LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn.getConnection(), currentThread.getName());
+            LOG.trace("Obtaining already reserved connection {} with internal connection {} for thread {}", conn, conn != null ? conn.getConnection() : null, currentThread.getName());
             if (conn != null)
-            conn.incrementUsageNumber();
+                conn.incrementUsageNumber();
             return conn;
         }
     }
