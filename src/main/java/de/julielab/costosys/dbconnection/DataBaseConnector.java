@@ -3269,7 +3269,7 @@ public class DataBaseConnector {
         try {
 
             DBCIterator<byte[][]> it = new DBCIterator<>() {
-                private CoStoSysConnection conn = reserveConnection(true);
+                private CoStoSysConnection conn = reserveConnection(false);
                 private ResultSet rs = doQuery(conn);
                 private boolean hasNext = rs.next();
 
@@ -3281,15 +3281,10 @@ public class DataBaseConnector {
                     // first we get IDs from a subset and then only the actual
                     // documents
                     // for these IDs.
-                    boolean autoCommit = conn.getAutoCommit();
-                    try {
-                        conn.setAutoCommit(false);
-                        Statement stmt = conn.createStatement();
-                        stmt.setFetchSize(queryBatchSize);
-                        return stmt.executeQuery(finalQuery);
-                    } finally {
-                        conn.setAutoCommit(autoCommit);
-                    }
+                    conn.setAutoCommit(false);
+                    Statement stmt = conn.createStatement();
+                    stmt.setFetchSize(queryBatchSize);
+                    return stmt.executeQuery(finalQuery);
                 }
 
                 @Override

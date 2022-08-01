@@ -79,6 +79,18 @@ public class DataBaseConnectorTest {
     }
 
     @Test(dependsOnMethods = "testRetrieveAndMark")
+    public void testReadDataTable() {
+        dbc.setQueryBatchSize(2);
+        final DBCIterator<byte[][]> it = dbc.queryDataTable(Constants.DEFAULT_DATA_TABLE_NAME, null, null, "medline_2016");
+        int count = 0;
+        while (it.hasNext()) {
+            byte[][] next = it.next();
+            ++count;
+        }
+        assertEquals(10, count);
+    }
+
+    @Test(dependsOnMethods = "testRetrieveAndMark")
     public void testJoinTablesWithDataTable() throws Exception {
         // Copy the medline_2016 field configuration to create a new configuration with the same fields but without setting the primary key for retrieve and not zipping the
         // XML field for simplicity of the test. It is important to create new Maps for the fields because otherwise we would override the original field configuration.
