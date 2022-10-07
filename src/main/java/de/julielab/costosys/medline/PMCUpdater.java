@@ -63,13 +63,20 @@ public class PMCUpdater {
                 // exist.
                 boolean exists = dbc.tableExists(UPDATE_TABLE);
                 if (!exists) {
-
                     String createUpdateTable = String.format(
                             "CREATE TABLE %s " + "(%s TEXT PRIMARY KEY," + "%s BOOLEAN DEFAULT FALSE,"
                                     + "%s TIMESTAMP WITHOUT TIME ZONE)",
                             UPDATE_TABLE, COLUMN_FILENAME, COLUMN_IS_IMPORTED, COLUMN_TIMESTAMP);
                     st.execute(createUpdateTable);
                 }
+
+                boolean baselineFilesPresent = st.executeQuery("SELECT * FROM " + UPDATE_TABLE + " WHERE " + COLUMN_FILENAME + " LIKE '%baseline%' LIMIT 1").next();
+                if (baselineFilesPresent) {
+                    log.info("Found baseline files in the update file tracking table " + UPDATE_TABLE + ". No new baseline files will be added to the table and, thus, not be imported into the database. If you need to import the baseline files into the database, delete all baseline rows from " + UPDATE_TABLE + ". If you want to import everything from scratch, you may truncate or drop " + UPDATE_TABLE + " altogether.");
+                    // Remove all the baseline files from the new files
+                    updateFileNameSet = updateFileNameSet.stream().filter(filename -> !filename.contains("baseline")).collect(Collectors.toSet());
+                }
+
                 // Determine which update files are new.
                 Set<String> filenamesInDBSet = new HashSet<String>();
                 ResultSet rs = st.executeQuery(String.format("SELECT %s from %s", COLUMN_FILENAME, UPDATE_TABLE));
@@ -118,7 +125,7 @@ public class PMCUpdater {
 
     /**
      * Reads the filelist.txt file for the given XML archive file. Extracts the IDs that are marked as "retracted".
-     * Note tha per PMC policy, retracted articles are not actually removed from PMC. So we might actually keep them, too.
+     * Note that per PMC policy, retracted articles are not actually removed from PMC. So we might actually keep them, too.
      *
      * @param file
      * @return
