@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6.2 (09/03/2023)
+- [**enhancement**] Skip PMC update files that cannot be read [#18](https://github.com/JULIELab/costosys/issues/18)
+
+---
+
 ## v1.6.1 (17/11/2022)
 - [**enhancement**] Create a XmiColumnDataInserter [#16](https://github.com/JULIELab/costosys/issues/16)
 - [**closed**] Add 'nsAware' attribute to 'tableSchema' [#15](https://github.com/JULIELab/costosys/issues/15)
