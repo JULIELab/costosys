@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>costosys</artifactId>
-    <version>1.6.1</version>
+    <version>1.6.2</version>
     <name>Corpus Storage System</name>
     <description>A utility for managing documents stored in a PostgreSQL database. The documents are imported into a
         PostgreSQL DB as full texts with the goal to be able to retrieve the documents by their PubMedID efficiently.
@@ -148,7 +148,7 @@
         <dependency>
             <groupId>de.julielab</groupId>
             <artifactId>julie-xml-tools</artifactId>
-            <version>0.6.5-SNAPSHOT</version>
+            <version>0.6.7</version>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
